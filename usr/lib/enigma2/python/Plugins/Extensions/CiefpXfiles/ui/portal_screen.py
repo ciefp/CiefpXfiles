@@ -36,7 +36,7 @@ from enigma import eConsoleAppContainer
 from Screens.MessageBox import MessageBox
 import os
 
-PLUGIN_VERSION = "1.0.0"  # Trenutna verzija tvog plugina
+PLUGIN_VERSION = "1.0.1"  # Trenutna verzija tvog plugina
 VERSION_URL = "https://raw.githubusercontent.com/ciefp/CiefpXfiles/main/version.txt"
 UPDATE_COMMAND = "wget -q --no-check-certificate https://raw.githubusercontent.com/ciefp/CiefpXfiles/main/installer.sh -O - | /bin/sh"
 
@@ -417,10 +417,12 @@ class PortalScreen(Screen):
 
         self._check_in_progress = True
         self._set_busy(True)
-        self["status"].setText(f"Checking {len(self.portals)} portals...")
+        total = len(self.portals)
+        self["status"].setText(f"Checking 0/{total} portals...")
 
         def worker():
-            for p in self.portals:
+            from enigma import eTimer
+            for idx, p in enumerate(self.portals):
                 api = XtreamAPI(p["host"], p["username"], p["password"])
                 ok, data, err = api.get_player_api()
 
@@ -432,23 +434,41 @@ class PortalScreen(Screen):
                     "msg": "OK" if ok else (err or "Offline"),
                     "data": data if ok else None,
                 }
+
+                # Ažuriraj status i osveži listu na glavnom thread-u
+                def _update_progress(current_idx, total_count, portal_id):
+                    self["status"].setText(f"Checking {current_idx}/{total_count} portals...")
+                    # Osveži listu da bi se odmah videla promena ikonice
+                    self._refresh_list()
+
+                t = eTimer()
+                t.callback.append(lambda ci=idx + 1, tc=total, pid=p["id"]: _update_progress(ci, tc, pid))
+                t.start(10, True)
+
             self._on_check_done()
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_check_done(self):
         from enigma import eTimer
-        def _do():
+
+        def _show_final():
             self._check_in_progress = False
             self._set_busy(False)
             self._refresh_list()
             self._update_info(self._current_idx())
             online = sum(1 for r in self.check_results.values() if r.get("online"))
             total = len(self.check_results)
-            self["status"].setText(f"Check done: {online}/{total} online")
+            self["status"].setText(f"Check completed: {online}/{total} online")
+
+        # Prvo prikaži "Checking 30/30" na trenutak
+        self["status"].setText(f"Checking {len(self.portals)}/{len(self.portals)} portals...")
+
+        # Sačekaj 300ms pre nego što prikažeš finalnu poruku
         t = eTimer()
-        t.callback.append(_do)
-        t.start(10, True)
+        t.callback.append(_show_final)
+        t.start(300, True)
+
 
     def delete_selected(self):
         idx = self._current_idx()

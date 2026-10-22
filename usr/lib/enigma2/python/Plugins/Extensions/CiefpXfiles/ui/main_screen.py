@@ -682,21 +682,29 @@ class MainScreen(Screen):
             else:
                 return
 
+        # Odabir plejera
         if self.current_view == "LIVE":
             p_type = self.player_type_live
         else:
             p_type = self.player_type_vod
 
         self["status"].setText(f"Playing: {title}...")
+
+        # 1. Puštamo strim
         success, err = play_stream(self.session, url, p_type, title=title)
 
         if success:
+            # 2. Sakrijemo prozor (ne zatvaramo ga odmah)
+            self.hide()
+
+            # 3. Zatvorimo prozor nakon 500ms (kada plejer već preuzme fokus)
             from enigma import eTimer
-            def _close_plugin():
+            def _close_later():
                 self.close(True)
-            t = eTimer()
-            t.callback.append(_close_plugin)
-            t.start(100, True)
+
+            self._close_timer = eTimer()
+            self._close_timer.callback.append(_close_later)
+            self._close_timer.start(500, True)
         else:
             self["status"].setText(f"Play failed: {err}")
 
