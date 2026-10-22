@@ -12,6 +12,8 @@ from Components.MenuList import MenuList
 from Components.Pixmap import Pixmap
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaTest
 from Screens.Screen import Screen
+from Screens.VirtualKeyBoard import VirtualKeyBoard
+from Screens.MessageBox import MessageBox
 from Tools.LoadPixmap import LoadPixmap
 from enigma import eListboxPythonMultiContent, gFont, loadPNG, RT_HALIGN_LEFT, RT_VALIGN_CENTER
 
@@ -38,7 +40,7 @@ def _get_icon_path(icon_name):
 class MainScreen(Screen):
     skin = """
         <screen name="CiefpXfilesMain" position="0,0" size="1920,1080"
-                backgroundColor="#011a2e" title="..:: CiefpXfiles ::..">
+                backgroundColor="#011a2e">
 
             <!-- NASLOV NA VRHU -->
             <widget name="title" position="0,20" size="1920,60" font="Bold;42"
@@ -86,7 +88,7 @@ class MainScreen(Screen):
                     alphatest="blend" zPosition="2"/>
 
             <!-- STATUS -->
-            <widget name="status" position="1250,1005" size="700,40"
+            <widget name="status" position="720,950" size="1000,40"
                     font="Regular;24" halign="left" valign="center"
                     foregroundColor="#00FF00" backgroundColor="#011a2e" transparent="1"/>
 
@@ -108,8 +110,12 @@ class MainScreen(Screen):
                     foregroundColor="white" backgroundColor="#000080" halign="center" valign="center"/>
             
             <ePixmap pixmap="buttons/red.png" position="960,1005" size="35,35" alphatest="blend"/>
-            <eLabel text="SETTINGS" position="1010,1000" size="200,45" font="Bold;28"
+            <eLabel text="MENU:SETTINGS" position="1010,1000" size="300,45" font="Bold;28"
                     foregroundColor="white" backgroundColor="#400080" halign="center" valign="center"/>
+                                
+            <ePixmap pixmap="buttons/green.png" position="1300,1005" size="35,35" alphatest="blend"/>
+            <eLabel text="INFO:SEARCH" position="1350,1000" size="300,45" font="Bold;28"
+                    foregroundColor="white" backgroundColor="#00802d" halign="center" valign="center"/>
         </screen>
     """
 
@@ -162,7 +168,7 @@ class MainScreen(Screen):
 
         # Actions
         self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions"],
+            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions", "InfoActions"], # <-- DODATO InfoActions
             {
                 "cancel": self.close,
                 "red": self.close,
@@ -172,7 +178,8 @@ class MainScreen(Screen):
                 "ok": self.on_ok,
                 "up": self.on_up,
                 "down": self.on_down,
-                "menu": self.open_settings,
+                "menu": self.open_settings,   # MENU dugme ostaje za Settings
+                "info": self.search_content,  # INFO dugme sada služi za pretragu
             }, -1
         )
 
@@ -815,6 +822,90 @@ class MainScreen(Screen):
         self["left_list"].setList(items)
         self["left_list"].moveToIndex(0)
         self["status"].setText(f"Loaded {len(episodes)} episodes for Season {season_num}.")
+        self._update_info()
+
+    def search_content(self):
+        # Pretraga radi samo kada smo u listi filmova ili serija (ne u kategorijama)
+        if self.current_category is None:
+            self.session.open(
+                MessageBox,
+                "Search is available only within a category (Movies or Series).",
+                MessageBox.TYPE_INFO, timeout=3
+            )
+            return
+
+        def do_search(search_term):
+            if not search_term:
+                return
+
+            # Pretvaramo u mala slova za lakšu pretragu
+            search_term = search_term.lower()
+
+            # Filtriramo trenutnu listu streamova
+            filtered_streams = []
+            for s in self.streams:
+                name = s.get("name", "").lower()
+                if search_term in name:
+                    filtered_streams.append(s)
+
+            if not filtered_streams:
+                self.session.open(
+                    MessageBox,
+                    f"No results for: '{search_term}'",
+                    MessageBox.TYPE_INFO, timeout=3
+                )
+                return
+
+            # Prikazujemo filtrirane rezultate
+            self.streams = filtered_streams
+            self._render_filtered_streams()
+
+        # Otvaramo virtuelnu tastaturu
+        self.session.openWithCallback(
+            do_search,
+            VirtualKeyBoard,
+            title="Search",
+            text=""
+        )
+
+    def _render_filtered_streams(self):
+        """Pomoćna funkcija za prikaz filtriranih rezultata."""
+        items = []
+        items.append([
+            ("BACK", ""),
+            MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
+                                  flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                  text="[ BACK TO CATEGORIES ]")
+        ])
+
+        if self.current_view == "SERIES":
+            icon = _get_icon_path("icon_tv.png")
+        elif self.current_view == "LIVE":
+            icon = _get_icon_path("icon_live.png")
+        else:
+            icon = _get_icon_path("icon_film.png")
+
+        for s in self.streams:
+            name = s.get("name", "Unknown")
+            if os.path.exists(icon):
+                items.append([
+                    (name, s.get("stream_id") if "stream_id" in s else s.get("series_id")),
+                    MultiContentEntryPixmapAlphaTest(pos=(10, 10), size=(30, 30), png=loadPNG(icon)),
+                    MultiContentEntryText(pos=(50, 0), size=(600, 50), font=0,
+                                          flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                          text=name)
+                ])
+            else:
+                items.append([
+                    (name, s.get("stream_id") if "stream_id" in s else s.get("series_id")),
+                    MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
+                                          flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                          text=name)
+                ])
+
+        self["left_list"].setList(items)
+        self["left_list"].moveToIndex(0)
+        self["status"].setText(f"Found {len(self.streams)} results.")
         self._update_info()
 
     def open_settings(self):

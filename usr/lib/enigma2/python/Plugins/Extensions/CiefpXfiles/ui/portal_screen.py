@@ -36,14 +36,14 @@ from enigma import eConsoleAppContainer
 from Screens.MessageBox import MessageBox
 import os
 
-PLUGIN_VERSION = "1.0.1"  # Trenutna verzija tvog plugina
+PLUGIN_VERSION = "1.0.2"  # Trenutna verzija tvog plugina
 VERSION_URL = "https://raw.githubusercontent.com/ciefp/CiefpXfiles/main/version.txt"
 UPDATE_COMMAND = "wget -q --no-check-certificate https://raw.githubusercontent.com/ciefp/CiefpXfiles/main/installer.sh -O - | /bin/sh"
 
 class PortalScreen(Screen):
     skin = """
         <screen name="CiefpXfilesPortal" position="0,0" size="1920,1080"
-                backgroundColor="#011a2e" title="..:: CiefpXfiles ::..">
+                backgroundColor="#011a2e">
 
             <widget name="title" position="0,20" size="1920,60" font="Bold;42"
                     halign="center" valign="center" foregroundColor="#FFFFFF"
