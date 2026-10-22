@@ -169,6 +169,15 @@ class PortalScreen(Screen):
             self["version_status"].setText("Update check failed.")
             print("[CiefpXfiles] Update error:", e)
 
+    def version_data_avail(self, data):
+        self.version_buffer += data
+
+    def command_finished(self, retval):
+        if self.version_check_in_progress:
+            self.version_check_closed(retval)
+        else:
+            self.update_completed(retval)
+
     def version_check_closed(self, retval):
         self.version_check_in_progress = False
         if retval == 0:
