@@ -14,8 +14,15 @@ from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixm
 from Screens.Screen import Screen
 from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Screens.MessageBox import MessageBox
-from Tools.LoadPixmap import LoadPixmap
+from Screens.InfoBar import InfoBar
+from Screens.InfoBar import MoviePlayer
+from Screens.InfoBarGenerics import InfoBarSeek, InfoBarAudioSelection, InfoBarSubtitleSupport, InfoBarMoviePlayerSummarySupport
 from enigma import eListboxPythonMultiContent, gFont, loadPNG, RT_HALIGN_LEFT, RT_VALIGN_CENTER
+from enigma import iPlayableService
+from enigma import eTimer, eServiceReference
+
+from Components.ServiceEventTracker import ServiceEventTracker, InfoBarBase
+from Tools.LoadPixmap import LoadPixmap
 
 from ..core.xtream_api import XtreamAPI
 from ..core.player import play_stream
@@ -353,6 +360,7 @@ class MainScreen(Screen):
             self._update_info()
         except Exception:
             pass
+            
     def _update_info(self):
         idx = self["left_list"].getSelectedIndex()
 
@@ -689,7 +697,6 @@ class MainScreen(Screen):
             else:
                 return
 
-        # Odabir plejera
         if self.current_view == "LIVE":
             p_type = self.player_type_live
         else:
@@ -697,24 +704,31 @@ class MainScreen(Screen):
 
         self["status"].setText(f"Playing: {title}...")
 
-        # 1. Puštamo strim
-        success, err = play_stream(self.session, url, p_type, title=title)
+        encoded_url = url.replace(":", "%3a")
+        safe_title = title.replace(":", " -").replace("\n", " ")
+        ref_str = f"{p_type}:0:1:0:0:0:0:0:0:0:{encoded_url}:{safe_title}"
 
-        if success:
-            # 2. Sakrijemo prozor (ne zatvaramo ga odmah)
-            self.hide()
+        try:
+            ref = eServiceReference(ref_str)
+            if not ref.valid():
+                self["status"].setText("Invalid service reference")
+                return
+        except Exception as e:
+            self["status"].setText(f"Error: {e}")
+            return
 
-            # 3. Zatvorimo prozor nakon 500ms (kada plejer već preuzme fokus)
-            from enigma import eTimer
-            def _close_later():
-                self.close(True)
-
-            self._close_timer = eTimer()
-            self._close_timer.callback.append(_close_later)
-            self._close_timer.start(500, True)
-        else:
-            self["status"].setText(f"Play failed: {err}")
-
+        try:
+            self.session.openWithCallback(
+                self._on_stream_player_closed,
+                MoviePlayer,
+                ref
+            )
+        except Exception as e:
+            self["status"].setText(
+                "Could not open player: {}".format(e)
+            )
+            print("[CiefpXfiles] MoviePlayer error: {}".format(e))
+            
     def _open_series(self, series_data):
         series_id = series_data.get("series_id")
         series_name = series_data.get("name", "Unknown")
@@ -908,5 +922,81 @@ class MainScreen(Screen):
         self["status"].setText(f"Found {len(self.streams)} results.")
         self._update_info()
 
+    def _on_stream_player_closed(self, *args):
+        try:
+            self._update_info()
+            self["status"].setText("Returned to CiefpXfiles.")
+        except Exception as e:
+            print("[CiefpXfiles] Return error: {}".format(e))
+
     def open_settings(self):
         self.session.open(SettingsScreen)
+
+
+class StreamPlayerScreen(
+    InfoBarBase,
+    InfoBarSeek,
+    InfoBarAudioSelection,
+    InfoBarSubtitleSupport,
+    InfoBarMoviePlayerSummarySupport,
+    Screen
+):
+    ALLOW_SUSPEND = True
+
+    def __init__(self, session, url, servicetype, title):
+        Screen.__init__(self, session)
+        self.session = session
+
+        # Inicijalizacija potrebnih klasa
+        for x in (
+        InfoBarBase, InfoBarSeek, InfoBarAudioSelection, InfoBarSubtitleSupport, InfoBarMoviePlayerSummarySupport):
+            x.__init__(self)
+
+        self.url = url
+        self.servicetype = servicetype
+        self.title = title
+
+        # Prazan skin (ne prikazujemo ništa, samo preuzimamo komande)
+        self.skin = """
+            <screen name="StreamPlayerScreen" position="0,0" size="1920,1080" backgroundColor="transparent">
+                <widget name="dummy" position="0,0" size="1,1" />
+            </screen>
+        """
+
+        self["dummy"] = Label("")
+
+        self["actions"] = ActionMap(["OkCancelActions", "DirectionActions", "ColorActions"], {
+            "cancel": self.close,
+            "stop": self.close,
+            "ok": self.show_infobar,
+        }, -2)
+
+        self.onFirstExecBegin.append(self.play_stream)
+
+    def play_stream(self):
+        # Formiramo eServiceReference
+        encoded_url = self.url.replace(":", "%3a")
+        safe_title = self.title.replace(":", " -").replace("\n", " ")
+        ref_str = f"{self.servicetype}:0:1:0:0:0:0:0:0:0:{encoded_url}:{safe_title}"
+
+        try:
+            ref = eServiceReference(ref_str)
+            if not ref.valid():
+                self.close()
+                return
+            self.session.nav.playService(ref)
+        except Exception as e:
+            print(f"[CiefpXfiles] playService error: {e}")
+            self.close()
+            return
+
+        # Prikazujemo InfoBar
+        self.show_infobar()
+
+    def show_infobar(self):
+        try:
+            from Screens.InfoBar import InfoBar
+            if InfoBar.instance:
+                InfoBar.instance.show()
+        except Exception as e:
+            print(f"[CiefpXfiles] InfoBar error: {e}")

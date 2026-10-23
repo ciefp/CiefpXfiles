@@ -101,20 +101,35 @@ def fetch_metadata_async(title, media_type, callback):
         search_title = title
 
         # 1. Uklanjamo prefikse kao što su "4K | ", "HD | ", "FHD | " itd.
-        # Ovo pokriva sve što se nalazi pre znaka "|" (ako postoji)
         if "|" in search_title:
             search_title = search_title.split("|", 1)[1].strip()
 
         # 2. Uklanjamo prefikse u zagradama na početku, npr. "[HD] ", "[4K] "
         search_title = re.sub(r'^\[.*?\]\s*', '', search_title)
 
-        # 3. Uklanjamo godinu iz naslova za lakšu pretragu (npr. "Movie (2023)" -> "Movie")
+        # 3. Uklanjamo jezičke prefikse na početku, npr. "EN - ", "FR - ", "DE - ", "SR - ", "EX-YU - " itd.
+        search_title = re.sub(r'^[A-Z]{2,5}\s*-\s*', '', search_title)
+
+        # 4. Uklanjamo sufiksе u zagradama na kraju, npr. "[MULTI-SUB]", "[HD]", "[4K]"
+        search_title = re.sub(r'\s*\[.*?\]\s*$', '', search_title).strip()
+
+        # 5. Uklanjamo godinu iz naslova za lakšu pretragu (npr. "Movie (2023)" -> "Movie")
         m = re.search(r'\((\d{4})\)', search_title)
         if m:
             search_title = search_title.replace(m.group(0), "").strip()
 
-        # 4. Uklanjamo eventualne dodatne oznake kao što su "HD", "FHD", "4K" na kraju
+        # 6. Uklanjamo godinu sa kraja naslova, sa ili bez crtice (npr. "Movie 2024" ili "Movie - 2024" -> "Movie")
+        search_title = re.sub(r'\s*-\s*(19|20)\d{2}\s*$', '', search_title).strip()
+        search_title = re.sub(r'\s+(19|20)\d{2}\s*$', '', search_title).strip()
+
+        # 7. Uklanjamo eventualne dodatne oznake kao što su "HD", "FHD", "4K" na kraju
         search_title = re.sub(r'\s+(HD|FHD|UHD|4K|SD|H265|HEVC)$', '', search_title, flags=re.IGNORECASE).strip()
+
+        # 8. Zamenjujemo donje crte (_) i tačke (.) razmacima
+        search_title = search_title.replace("_", " ").replace(".", " ")
+
+        # 9. Uklanjamo višestruke razmake i prazne znakove
+        search_title = re.sub(r'\s+', ' ', search_title).strip()
 
         # Ako je naslov ostao prazan nakon čišćenja, vrati grešku
         if not search_title:

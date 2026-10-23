@@ -1,0 +1,4 @@
+http://neosfpoo.top:8080/get.php?username=3801762212907352&password=2e42fcf1bebe&type=m3u_plus&output=m3u8
+http://chefexpress.xyz/get.php?username=amsuca&password=am27999629200&type=m3u_plus&output=ts
+http://chefexpress.xyz/get.php?username=Natalia002&password=870065522irmao&type=m3u_plus&output=ts
+http://case2.lat/get.php?username=333529826&password=486186272&type=m3u_plus&output=ts
