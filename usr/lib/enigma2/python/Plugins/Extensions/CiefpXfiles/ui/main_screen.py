@@ -175,7 +175,7 @@ class MainScreen(Screen):
 
         # Actions
         self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions", "InfoActions"], # <-- DODATO InfoActions
+            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions", "InfoActions"],
             {
                 "cancel": self.close,
                 "red": self.close,
@@ -185,11 +185,12 @@ class MainScreen(Screen):
                 "ok": self.on_ok,
                 "up": self.on_up,
                 "down": self.on_down,
-                "menu": self.open_settings,   # MENU dugme ostaje za Settings
-                "info": self.search_content,  # INFO dugme sada služi za pretragu
+                "menu": self.open_settings,
+                "info": self.search_content,
+                "help": self.search_content,  # <-- DODATO ZA OPENBH
             }, -1
         )
-
+        
         self.onLayoutFinish.append(self.on_start)
 
     def on_start(self):
