@@ -89,6 +89,7 @@ def _download_image(url, filename):
         print(f"[CiefpXfiles] Image download error: {e}")
         return None
 
+
 def fetch_metadata_async(title, media_type, callback):
     def worker():
         api_key = _get_api_key()
@@ -98,15 +99,35 @@ def fetch_metadata_async(title, media_type, callback):
 
         import re
         search_title = title
-        m = re.search(r'\((\d{4})\)', title)
-        if m:
-            search_title = title.replace(m.group(0), "").strip()
 
+        # 1. Uklanjamo prefikse kao što su "4K | ", "HD | ", "FHD | " itd.
+        # Ovo pokriva sve što se nalazi pre znaka "|" (ako postoji)
+        if "|" in search_title:
+            search_title = search_title.split("|", 1)[1].strip()
+
+        # 2. Uklanjamo prefikse u zagradama na početku, npr. "[HD] ", "[4K] "
+        search_title = re.sub(r'^\[.*?\]\s*', '', search_title)
+
+        # 3. Uklanjamo godinu iz naslova za lakšu pretragu (npr. "Movie (2023)" -> "Movie")
+        m = re.search(r'\((\d{4})\)', search_title)
+        if m:
+            search_title = search_title.replace(m.group(0), "").strip()
+
+        # 4. Uklanjamo eventualne dodatne oznake kao što su "HD", "FHD", "4K" na kraju
+        search_title = re.sub(r'\s+(HD|FHD|UHD|4K|SD|H265|HEVC)$', '', search_title, flags=re.IGNORECASE).strip()
+
+        # Ako je naslov ostao prazan nakon čišćenja, vrati grešku
+        if not search_title:
+            callback(False, "Invalid title after cleaning")
+            return
+
+        # Sada pretražujemo TMDB sa očišćenim naslovom
         try:
             query = urllib.parse.quote(search_title)
             url = f"https://api.themoviedb.org/3/search/{media_type}?api_key={api_key}&query={query}&language=en-US"
 
             data = _fetch_json(url)
+
             if not data:
                 callback(False, "TMDB request failed (Check network/SSL)")
                 return
