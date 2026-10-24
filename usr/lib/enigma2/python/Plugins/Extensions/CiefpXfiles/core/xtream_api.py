@@ -206,8 +206,12 @@ class XtreamAPI(object):
 
     # ---------- SHORT EPG ----------
     def get_short_epg(self, stream_id, limit=2):
-        url = self._api_url(action="get_short_epg", stream_id=stream_id, limit=limit)
+        """Dohvata EPG preko get_simple_data_table (kao XKlass)."""
+        url = self._api_url(action="get_simple_data_table", stream_id=stream_id)
         data = _http_get_json(url, timeout=self.timeout)
         if not isinstance(data, dict):
-            return False, None, "Invalid short epg"
+            return False, None, "Invalid simple data table"
         return True, data, None
+
+    def build_live_hls_url(self, stream_id):
+        return f"{self.host}/live/{self.username}/{self.password}/{stream_id}.m3u8"

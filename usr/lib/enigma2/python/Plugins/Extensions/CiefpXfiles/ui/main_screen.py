@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# main_screen.py - Glavni ekran sa 3 panela (Kategorije, Info, Poster)
+# main_screen.py - Glavni ekran za Filmove i Serije
 #
 from __future__ import absolute_import, print_function
 
@@ -14,23 +14,17 @@ from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixm
 from Screens.Screen import Screen
 from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Screens.MessageBox import MessageBox
-from Screens.InfoBar import InfoBar
 from Screens.InfoBar import MoviePlayer
-from Screens.InfoBarGenerics import InfoBarSeek, InfoBarAudioSelection, InfoBarSubtitleSupport, InfoBarMoviePlayerSummarySupport
 from enigma import eListboxPythonMultiContent, gFont, loadPNG, RT_HALIGN_LEFT, RT_VALIGN_CENTER
-from enigma import iPlayableService
 from enigma import eTimer, eServiceReference
 
-from Components.ServiceEventTracker import ServiceEventTracker, InfoBarBase
 from Tools.LoadPixmap import LoadPixmap
 
 from ..core.xtream_api import XtreamAPI
-from ..core.player import play_stream
-from ..core.metadata import fetch_metadata_async
-from .settings_screen import SettingsScreen
-from ..core.epg_parser import download_epg_async, load_epg_from_cache, get_current_epg
 from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async, translate_text_async
+from .settings_screen import SettingsScreen
 from ..core.config import config
+from .live_screen import LiveScreen
 
 def _load_pixmap_safe(path):
     if path and os.path.exists(path):
@@ -134,7 +128,7 @@ class MainScreen(Screen):
         # Inicijalizacija API klijenta
         self.api = XtreamAPI(portal["host"], portal["username"], portal["password"])
         
-        self.current_view = "HOME" # HOME, LIVE, VOD, SERIES
+        self.current_view = "HOME" # HOME, VOD, SERIES
         self.categories = []
         self.streams = []
         self.current_category = None
@@ -144,10 +138,8 @@ class MainScreen(Screen):
         self._fetch_timer = None  
         self._last_tmdb_title = None 
         self._tmdb_timer = None
-        self._epg_loaded = False
 
         # Tip plejera (učitava se iz config-a)
-        self.player_type_live = config.plugins.ciefpxfiles.player_type_live.value
         self.player_type_vod = config.plugins.ciefpxfiles.player_type_vod.value
 
         # Widgets
@@ -175,11 +167,11 @@ class MainScreen(Screen):
 
         # Actions
         self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions", "InfoActions"],
+            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions", "InfoActions", "HelpActions"],
             {
                 "cancel": self.close,
                 "red": self.close,
-                "green": self.show_live,
+                "green": self.open_live_screen,
                 "yellow": self.show_movies,
                 "blue": self.show_series,
                 "ok": self.on_ok,
@@ -187,10 +179,10 @@ class MainScreen(Screen):
                 "down": self.on_down,
                 "menu": self.open_settings,
                 "info": self.search_content,
-                "help": self.search_content,  # <-- DODATO ZA OPENBH
+                "help": self.search_content,
             }, -1
         )
-        
+
         self.onLayoutFinish.append(self.on_start)
 
     def on_start(self):
@@ -226,17 +218,16 @@ class MainScreen(Screen):
         self.current_category = None
         self._clear_info_panel()
         self._set_poster(None)
-        
-        # Pravimo listu sa sličicama
+
         items = []
-        # Placeholder za prvi red (Please select a category)
         items.append([
             ("", ""),
             MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
                                   flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
                                   text="Please select a category:")
         ])
-        
+
+        # --- LIVE ---
         icon_live = _get_icon_path("icon_live.png")
         if os.path.exists(icon_live):
             items.append([
@@ -247,8 +238,10 @@ class MainScreen(Screen):
                                       text="> Live")
             ])
         else:
-            items.append([("LIVE", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text="> Live")])
+            items.append([("LIVE", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
+                                                              flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text="> Live")])
 
+        # --- MOVIES ---
         icon_film = _get_icon_path("icon_film.png")
         if os.path.exists(icon_film):
             items.append([
@@ -259,8 +252,11 @@ class MainScreen(Screen):
                                       text="> Movies")
             ])
         else:
-            items.append([("MOVIES", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text="> Movies")])
+            items.append([("MOVIES", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
+                                                                flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                                                text="> Movies")])
 
+        # --- SERIES ---
         icon_tv = _get_icon_path("icon_tv.png")
         if os.path.exists(icon_tv):
             items.append([
@@ -271,25 +267,23 @@ class MainScreen(Screen):
                                       text="> Series")
             ])
         else:
-            items.append([("SERIES", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text="> Series")])
+            items.append([("SERIES", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
+                                                                flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                                                text="> Series")])
 
-        items.append([("", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text="")])
-        items.append([("", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text="or make settings on the settings button:")])
-        items.append([("", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text="TMDB, OMDB, Clear Cache ...")])
-        
+        items.append([("", ""),
+                      MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                            text="")])
+        items.append([("", ""),
+                      MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                            text="or make settings on the settings button:")])
+        items.append([("", ""),
+                      MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                            text="TMDB, OMDB, Clear Cache ...")])
+
         self["left_list"].setList(items)
-        self["plot"].setText("Welcome to CiefpXfiles.\n\nUse Green, Yellow, or Blue buttons to browse content.")
-
-    def show_live(self):
-        self.current_view = "LIVE"
-        self.current_category = None
-        self["status"].setText("Loading Live categories...")
-        ok, data, err = self.api.get_live_categories()
-        if ok:
-            self.categories = data
-            self._render_categories()
-        else:
-            self["status"].setText(f"Error: {err}")
+        self["plot"].setText(
+            "Welcome to CiefpXfiles.\n\nPress GREEN for Live TV, YELLOW for Movies, or BLUE for Series.")
 
     def show_movies(self):
         self.current_view = "VOD"
@@ -386,7 +380,7 @@ class MainScreen(Screen):
             self._set_poster(None)
             return
 
-        # 2. LIVE ILI VOD ILI SERIJE (lista)
+        # 2. VOD ILI SERIJE (lista)
         if self.current_category is not None and not self.current_series:
             if 0 < idx <= len(self.streams):
                 s = self.streams[idx - 1]
@@ -417,7 +411,6 @@ class MainScreen(Screen):
         if self.current_series is not None and self.current_season is None:
             series_info = self.current_series.get("info", {})
             base_name = series_info.get("name", "Unknown Series")
-            # Pošto smo u listi sezona, a idx > 0, uzimamo ime sezone iz self.streams
             if 0 < idx <= len(self.streams):
                 season_num = self.streams[idx - 1]
                 self._clear_info_panel()
@@ -532,7 +525,7 @@ class MainScreen(Screen):
 
         if self.current_view == "HOME":
             if idx == 1:
-                self.show_live()
+                self.open_live_screen()
             elif idx == 2:
                 self.show_movies()
             elif idx == 3:
@@ -575,9 +568,7 @@ class MainScreen(Screen):
 
     def _load_streams_for_category(self):
         self["status"].setText("Loading streams...")
-        if self.current_view == "LIVE":
-            ok, data, err = self.api.get_live_streams(self.current_category)
-        elif self.current_view == "VOD":
+        if self.current_view == "VOD":
             ok, data, err = self.api.get_vod_streams(self.current_category)
         elif self.current_view == "SERIES":
             ok, data, err = self.api.get_series(self.current_category)
@@ -596,61 +587,28 @@ class MainScreen(Screen):
                                       text="[ BACK TO CATEGORIES ]")
             ])
 
-            if self.current_view == "LIVE":
-                icon_live = _get_icon_path("icon_live.png")
-                if not self._epg_loaded:
-                    epg_url = self.portal.get("epg")
-                    if epg_url:
-                        self["status"].setText("Downloading EPG...")
-                        download_epg_async(epg_url, self._on_epg_downloaded)
-                    else:
-                        self._epg_loaded = True
-
-                for s in self.streams:
-                    name = s.get("name", "Unknown")
-                    epg_info = get_current_epg(name)
-                    epg_str = ""
-                    if epg_info and epg_info.get("current"):
-                        epg_str = f" | {epg_info['current']['title']}"
-                    
-                    if os.path.exists(icon_live):
-                        items.append([
-                            (name, s.get("stream_id")),
-                            MultiContentEntryPixmapAlphaTest(pos=(10, 10), size=(30, 30), png=loadPNG(icon_live)),
-                            MultiContentEntryText(pos=(50, 0), size=(600, 50), font=0,
-                                                  flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
-                                                  text=f"{name}{epg_str}")
-                        ])
-                    else:
-                        items.append([
-                            (name, s.get("stream_id")),
-                            MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
-                                                  flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
-                                                  text=f"{name}{epg_str}")
-                        ])
+            if self.current_view == "SERIES":
+                icon = _get_icon_path("icon_tv.png")
             else:
-                if self.current_view == "SERIES":
-                    icon = _get_icon_path("icon_tv.png")
+                icon = _get_icon_path("icon_film.png")
+                
+            for s in self.streams:
+                name = s.get("name", "Unknown")
+                if os.path.exists(icon):
+                    items.append([
+                        (name, s.get("stream_id") if "stream_id" in s else s.get("series_id")),
+                        MultiContentEntryPixmapAlphaTest(pos=(10, 10), size=(30, 30), png=loadPNG(icon)),
+                        MultiContentEntryText(pos=(50, 0), size=(600, 50), font=0,
+                                              flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                              text=name)
+                    ])
                 else:
-                    icon = _get_icon_path("icon_film.png")
-                    
-                for s in self.streams:
-                    name = s.get("name", "Unknown")
-                    if os.path.exists(icon):
-                        items.append([
-                            (name, s.get("stream_id") if "stream_id" in s else s.get("series_id")),
-                            MultiContentEntryPixmapAlphaTest(pos=(10, 10), size=(30, 30), png=loadPNG(icon)),
-                            MultiContentEntryText(pos=(50, 0), size=(600, 50), font=0,
-                                                  flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
-                                                  text=name)
-                        ])
-                    else:
-                        items.append([
-                            (name, s.get("stream_id") if "stream_id" in s else s.get("series_id")),
-                            MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
-                                                  flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
-                                                  text=name)
-                        ])
+                    items.append([
+                        (name, s.get("stream_id") if "stream_id" in s else s.get("series_id")),
+                        MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
+                                              flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                                              text=name)
+                    ])
 
             self["left_list"].setList(items)
             self["left_list"].moveToIndex(0)
@@ -658,22 +616,6 @@ class MainScreen(Screen):
             self._update_info()
         else:
             self["status"].setText(f"Error: {err}")
-
-    def _on_epg_downloaded(self, success, msg):
-        from enigma import eTimer
-        def _update():
-            if success:
-                load_epg_from_cache()
-                self._epg_loaded = True
-                self["status"].setText("EPG Updated. Reloading list...")
-                self._load_streams_for_category()
-            else:
-                self._epg_loaded = True
-                self["status"].setText(f"EPG Error: {msg}")
-
-        t = eTimer()
-        t.callback.append(_update)
-        t.start(10, True)
 
     def _play_selected_stream(self):
         idx = self["left_list"].getSelectedIndex()
@@ -687,27 +629,19 @@ class MainScreen(Screen):
             ext = stream.get("container_extension", "mp4")
             url = self.api.build_series_url(ep_id, ext)
             title = stream.get("title", "Unknown")
-        else:
+        elif self.current_view == "VOD":
             stream_id = stream.get("stream_id")
             title = stream.get("name", "Unknown")
-            if self.current_view == "LIVE":
-                url = self.api.build_live_url(stream_id, "ts")
-            elif self.current_view == "VOD":
-                container_ext = stream.get("container_extension", "mp4")
-                url = self.api.build_movie_url(stream_id, container_ext)
-            else:
-                return
-
-        if self.current_view == "LIVE":
-            p_type = self.player_type_live
+            container_ext = stream.get("container_extension", "mp4")
+            url = self.api.build_movie_url(stream_id, container_ext)
         else:
-            p_type = self.player_type_vod
+            return
 
         self["status"].setText(f"Playing: {title}...")
 
         encoded_url = url.replace(":", "%3a")
         safe_title = title.replace(":", " -").replace("\n", " ")
-        ref_str = f"{p_type}:0:1:0:0:0:0:0:0:0:{encoded_url}:{safe_title}"
+        ref_str = f"{self.player_type_vod}:0:1:0:0:0:0:0:0:0:{encoded_url}:{safe_title}"
 
         try:
             ref = eServiceReference(ref_str)
@@ -895,8 +829,6 @@ class MainScreen(Screen):
 
         if self.current_view == "SERIES":
             icon = _get_icon_path("icon_tv.png")
-        elif self.current_view == "LIVE":
-            icon = _get_icon_path("icon_live.png")
         else:
             icon = _get_icon_path("icon_film.png")
 
@@ -932,72 +864,6 @@ class MainScreen(Screen):
 
     def open_settings(self):
         self.session.open(SettingsScreen)
-
-
-class StreamPlayerScreen(
-    InfoBarBase,
-    InfoBarSeek,
-    InfoBarAudioSelection,
-    InfoBarSubtitleSupport,
-    InfoBarMoviePlayerSummarySupport,
-    Screen
-):
-    ALLOW_SUSPEND = True
-
-    def __init__(self, session, url, servicetype, title):
-        Screen.__init__(self, session)
-        self.session = session
-
-        # Inicijalizacija potrebnih klasa
-        for x in (
-        InfoBarBase, InfoBarSeek, InfoBarAudioSelection, InfoBarSubtitleSupport, InfoBarMoviePlayerSummarySupport):
-            x.__init__(self)
-
-        self.url = url
-        self.servicetype = servicetype
-        self.title = title
-
-        # Prazan skin (ne prikazujemo ništa, samo preuzimamo komande)
-        self.skin = """
-            <screen name="StreamPlayerScreen" position="0,0" size="1920,1080" backgroundColor="transparent">
-                <widget name="dummy" position="0,0" size="1,1" />
-            </screen>
-        """
-
-        self["dummy"] = Label("")
-
-        self["actions"] = ActionMap(["OkCancelActions", "DirectionActions", "ColorActions"], {
-            "cancel": self.close,
-            "stop": self.close,
-            "ok": self.show_infobar,
-        }, -2)
-
-        self.onFirstExecBegin.append(self.play_stream)
-
-    def play_stream(self):
-        # Formiramo eServiceReference
-        encoded_url = self.url.replace(":", "%3a")
-        safe_title = self.title.replace(":", " -").replace("\n", " ")
-        ref_str = f"{self.servicetype}:0:1:0:0:0:0:0:0:0:{encoded_url}:{safe_title}"
-
-        try:
-            ref = eServiceReference(ref_str)
-            if not ref.valid():
-                self.close()
-                return
-            self.session.nav.playService(ref)
-        except Exception as e:
-            print(f"[CiefpXfiles] playService error: {e}")
-            self.close()
-            return
-
-        # Prikazujemo InfoBar
-        self.show_infobar()
-
-    def show_infobar(self):
-        try:
-            from Screens.InfoBar import InfoBar
-            if InfoBar.instance:
-                InfoBar.instance.show()
-        except Exception as e:
-            print(f"[CiefpXfiles] InfoBar error: {e}")
+        
+    def open_live_screen(self):
+        self.session.open(LiveScreen, self.portal, None)
