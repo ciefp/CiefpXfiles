@@ -11,11 +11,12 @@ from Components.Label import Label
 from Components.Pixmap import Pixmap
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
+from Screens.VirtualKeyBoard import VirtualKeyBoard
 from enigma import eTimer, eLabel, ePoint
 from Tools.LoadPixmap import LoadPixmap
 
 from ..core.xtream_api import XtreamAPI
-from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async
+from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async, translate_text_async
 from ..core.config import config
 from ..core.paths import POSTERS_CACHE_DIR
 from .modern_seasons_screen import ModernSeasonsScreen
@@ -98,7 +99,7 @@ class ModernSeriesScreen(Screen):
             <widget name="poster_9" position="1670,700" size="160,240" alphatest="blend" scale="1" zPosition="3"/>
 
             <widget name="page_info" position="50,980" size="400,40" font="Regular;24"
-                    foregroundColor="#AAAAAA" backgroundColor="#40000000" transparent="1" zPosition="3"/>
+                    foregroundColor="#00FF00" backgroundColor="#40000000" transparent="1" zPosition="3"/>
 
             <widget name="status" position="500,980" size="1000,40" font="Regular;24"
                     foregroundColor="#00FF00" backgroundColor="#40000000" transparent="1" halign="left" zPosition="3"/>
@@ -119,6 +120,10 @@ class ModernSeriesScreen(Screen):
             <ePixmap pixmap="buttons/blue.png" position="750,1020" size="35,35" alphatest="blend" zPosition="4"/>
             <eLabel text="NEXT 10" position="800,1015" size="200,45" font="Bold;28"
                     foregroundColor="white" backgroundColor="#000080" halign="center" valign="center" zPosition="4"/>
+            
+            <ePixmap pixmap="buttons/green.png" position="1000,1020" size="35,35" alphatest="blend" zPosition="4"/>
+            <eLabel text="INFO:SEARCH" position="1050,1015" size="300,45" font="Bold;28"
+                    foregroundColor="white" backgroundColor="#00802d" halign="center" valign="center" zPosition="4"/>        
         </screen>
     """
 
@@ -157,7 +162,7 @@ class ModernSeriesScreen(Screen):
             self["poster_%d" % i] = Pixmap()
 
         self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions"],
+            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions", "InfoActions"],
             {
                 "cancel": self.close,
                 "red": self.close,
@@ -167,6 +172,7 @@ class ModernSeriesScreen(Screen):
                 "ok": self.open_selected,
                 "left": self.on_left,
                 "right": self.on_right,
+                "info": self.search_content,
             }, -1
         )
 
@@ -237,6 +243,7 @@ class ModernSeriesScreen(Screen):
         )
         self._update_selection_frame()
         self.update_info_for_selected()
+
     def _on_poster_data(self, widget_name, success, data):
         if not success or not isinstance(data, dict):
             return
@@ -320,7 +327,13 @@ class ModernSeriesScreen(Screen):
             plot = data.get("plot", "-")
             if len(plot) > 400:
                 plot = plot[:400] + "..."
-            self["plot"].setText(plot)
+
+            # --- DODATO ZA PREVOD ---
+            if config.plugins.ciefpxfiles.groq_plot_translation.value:
+                self["plot"].setText(f"Plot:\n{plot}\n\n(Translating...)")
+                translate_text_async(plot, self._on_translated_plot)
+            else:
+                self["plot"].setText(f"Plot:\n{plot}")
 
             self["imdb_rating"].setText("IMDB: Loading...")
             fetch_omdb_rating_async(data.get('title'), data.get('year'), self._on_imdb_data)
@@ -351,6 +364,25 @@ class ModernSeriesScreen(Screen):
         self._imdb_ui_timer = eTimer()
         self._imdb_ui_timer.callback.append(_update_ui)
         self._imdb_ui_timer.start(10, True)
+
+    def _on_translated_plot(self, success, translated_text):
+        def _update_ui():
+            if success:
+                try:
+                    lang = config.plugins.ciefpxfiles.translate_language.value.upper()
+                except Exception:
+                    lang = "PREVOD"
+                self["plot"].setText(f"Plot ({lang}):\n{translated_text}")
+            else:
+                current_text = self["plot"].getText()
+                if "(Translating...)" in current_text:
+                    self["plot"].setText(current_text.replace("(Translating...)", f"(Prevod nije uspeo: {translated_text})"))
+                else:
+                    self["plot"].setText(current_text + f"\n\n(Prevod nije uspeo: {translated_text})")
+
+        self._trans_timer = eTimer()
+        self._trans_timer.callback.append(_update_ui)
+        self._trans_timer.start(10, True)
 
     def on_left(self):
         if self.selected_index > 0:
@@ -406,3 +438,31 @@ class ModernSeriesScreen(Screen):
             title,
             poster_path  # <-- DODATO
         )
+
+    def search_content(self):
+        def do_search(search_term):
+            if not search_term:
+                return
+            search_term = search_term.lower()
+            # Čuvamo originalnu listu pre filtriranja ako već nismo
+            if not hasattr(self, '_original_streams'):
+                self._original_streams = self.streams
+
+            filtered = [s for s in self._original_streams if search_term in s.get("name", "").lower()]
+
+            if not filtered:
+                self.session.open(MessageBox, f"No results for: '{search_term}'", MessageBox.TYPE_INFO, timeout=3)
+                # Resetujemo na original ako nema rezultata
+                self.streams = self._original_streams
+                self.current_page = 0
+                self.selected_index = 0
+                self.render_page()
+                return
+
+            self.streams = filtered
+            self.current_page = 0
+            self.selected_index = 0
+            self.render_page()
+            self["status"].setText(f"Found {len(self.streams)} results for '{search_term}'")
+
+        self.session.openWithCallback(do_search, VirtualKeyBoard, title="Search Series", text="")

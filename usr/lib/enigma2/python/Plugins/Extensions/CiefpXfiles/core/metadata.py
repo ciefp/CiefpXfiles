@@ -232,24 +232,23 @@ def fetch_omdb_rating_async(title, year, callback):
 
     threading.Thread(target=worker, daemon=True).start()
 
-
 def translate_text_async(text, callback):
     def worker():
         try:
-            import sys
-            plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            components_dir = os.path.join(plugin_dir, "components")
-            if components_dir not in sys.path:
-                sys.path.insert(0, components_dir)
-
-            from translator import Translator
+            # Importujemo Translator
+            from ..components.translator import Translator
 
             tr = Translator()
             if not tr.is_available():
-                callback(False, "Translator not available (API key or requests missing)")
+                callback(False, "Translator nije dostupan (API ključ ili requests nedostaju)")
                 return
 
-            lang_code = config.plugins.ciefpxfiles.subtitle_language.value
+            # BEZBEDNO ČITANJE IZ CONFIG-A
+            try:
+                lang_code = config.plugins.ciefpxfiles.translate_language.value
+            except Exception:
+                lang_code = "sr"  # Ako pukne, podrazumevano prevedi na srpski
+
             translated = tr.translate(text, target_language=lang_code)
 
             if translated and translated != text:

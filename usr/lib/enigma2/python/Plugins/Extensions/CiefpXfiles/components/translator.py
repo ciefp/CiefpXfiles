@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# components/translator.py – za CiefpEPGinfo
+# components/translator.py – za CiefpXfiles
 from __future__ import absolute_import, print_function
 
 import json
@@ -38,28 +38,56 @@ LANGUAGE_NAMES = {
     "tr": "Turkish",
     "nl": "Dutch",
     "sv": "Swedish",
+    "da": "Danish",
+    "fi": "Finnish",
+    "no": "Norwegian",
+    "he": "Hebrew",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "zh": "Chinese",
+    "hi": "Hindi",
+    "vi": "Vietnamese",
 }
-
 
 class Translator:
     def __init__(self, api_key=None, model=None):
-        # Uzmi iz config-a ako nije prosleđeno
+        # 1. Uzmi iz config-a ako nije prosleđeno
         if api_key is None:
             try:
                 api_key = config.plugins.ciefpxfiles.groq_api_key.value
             except Exception:
                 api_key = ""
+        
         if model is None:
             try:
                 model = config.plugins.ciefpxfiles.groq_model.value
             except Exception:
                 model = "openai/gpt-oss-20b"
 
-        # Ako nema u config-u, probaj iz fajla
+        # 2. Ako nema u config-u, probaj iz fajla
         if not api_key:
-            plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            key_file = os.path.join(plugin_dir, "groqapikey.txt")
-            if os.path.exists(key_file):
+            # Pokušaj 1: relativni import (kada se translator.py importuje kao deo paketa)
+            key_file = None
+            try:
+                from ..core.paths import GROQ_KEY_FILE
+                key_file = GROQ_KEY_FILE
+            except Exception:
+                pass
+
+            # Pokušaj 2: apsolutni import (kada se importuje kao top-level)
+            if key_file is None:
+                try:
+                    from core.paths import GROQ_KEY_FILE
+                    key_file = GROQ_KEY_FILE
+                except Exception:
+                    pass
+
+            # Pokušaj 3: fallback na plugin folder
+            if key_file is None:
+                plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                key_file = os.path.join(plugin_dir, "groqapikey.txt")
+
+            if key_file and os.path.exists(key_file):
                 try:
                     with open(key_file, "r", encoding="utf-8") as f:
                         api_key = f.read().strip()

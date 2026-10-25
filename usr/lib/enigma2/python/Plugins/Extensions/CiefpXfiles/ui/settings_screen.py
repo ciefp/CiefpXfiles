@@ -37,6 +37,20 @@ class SettingsScreen(Screen):
         </screen>
     """% BACKGROUND_SETTINGS
 
+    # Nove proširene liste jezika
+    TMDB_LANGUAGES = [
+        "en", "sr", "hr", "bs", "sl", "mk", "cs", "sk", "hu", "ro",
+        "bg", "el", "de", "fr", "es", "it", "pt", "nl", "sv", "no",
+        "da", "fi", "ru", "uk", "pl", "tr", "ar", "he", "ja", "ko",
+        "zh", "th", "vi"
+    ]
+
+    TRANSLATE_LANGUAGES = [
+        "sr", "hr", "bs", "sl", "mk", "en", "de", "fr", "es", "it",
+        "ru", "pt", "pl", "cs", "hu", "ro", "bg", "el", "tr", "nl",
+        "sv", "da", "fi", "no", "he", "ja", "ko", "zh", "hi", "vi"
+    ]
+
     def __init__(self, session):
         Screen.__init__(self, session)
         self.session = session
@@ -112,9 +126,12 @@ class SettingsScreen(Screen):
         p_vod = config.plugins.ciefpxfiles.player_type_vod.value
         skin_type = config.plugins.ciefpxfiles.skin_type.value
 
-        # Ostale opcije
+        # ISPRAVLJENO: Uzimamo translate_language za GROQ, a subtitle_language za titlove
+        translate_lang = getattr(config.plugins.ciefpxfiles, 'translate_language',
+                                 type('obj', (object,), {'value': 'sr'})).value
         sub_lang = getattr(config.plugins.ciefpxfiles, 'subtitle_language',
                            type('obj', (object,), {'value': 'sr'})).value
+
         epg_auto = "YES" if getattr(config.plugins.ciefpxfiles, 'epg_auto_update',
                                     type('obj', (object,), {'value': True})).value else "NO"
         adult = "YES" if getattr(config.plugins.ciefpxfiles, 'adult_content',
@@ -123,35 +140,41 @@ class SettingsScreen(Screen):
         cache_mb = self._get_cache_size()
 
         items = [
-            f"TMDB API Key:         {tmdb}",           # 0
-            f"OMDB API Key:         {omdb}",           # 1
-            f"GROQ API Key:         {groq}",           # 2
-            f"SUBDL API Key:        {subdl}",          # 3
-            "----------------------------------------", # 4
-            f"Skin Type:            {skin_type}",      # 5  <-- NOVO
-            f"TMDB Language:        {t_lang}",         # 6
-            f"GROQ Translate Plot:  {g_trans}",        # 7
-            f"GROQ Translate Lang:  {sub_lang}",       # 8
-            f"Live Player Type:     {p_live}",         # 9
-            f"VOD Player Type:      {p_vod}",          # 10
-            f"Subtitle Language:    {sub_lang}",       # 11
-            f"EPG Auto Update:      {epg_auto}",       # 12
-            f"Adult Content:        {adult}",          # 13
-            "----------------------------------------", # 14
-            f"Clear Cache:          {cache_mb:.1f} MB",# 15
-            ">>> TEST TMDB CONNECTION <<<"             # 16
+            f"TMDB API Key:         {tmdb}",  # 0
+            f"OMDB API Key:         {omdb}",  # 1
+            f"GROQ API Key:         {groq}",  # 2
+            f"SUBDL API Key:        {subdl}",  # 3
+            "----------------------------------------",  # 4
+            f"Skin Type:            {skin_type}",  # 5
+            f"TMDB Language:        {t_lang}",  # 6
+            f"GROQ Translate Plot:  {g_trans}",  # 7
+            f"GROQ Translate Lang:  {translate_lang}",  # 8 <-- ISPRAVLJENO (bilo sub_lang)
+            f"Live Player Type:     {p_live}",  # 9
+            f"VOD Player Type:      {p_vod}",  # 10
+            f"Subtitle Language:    {sub_lang}",  # 11
+            f"EPG Auto Update:      {epg_auto}",  # 12
+            f"Adult Content:        {adult}",  # 13
+            "----------------------------------------",  # 14
+            f"Clear Cache:          {cache_mb:.1f} MB",  # 15
+            ">>> TEST TMDB CONNECTION <<<"  # 16
         ]
 
         self["menu"].setList(items)
 
     def on_ok(self):
         idx = self["menu"].getSelectedIndex()
-        if idx == 0: self.edit_key("TMDB API Key", TMDB_KEY_FILE)
-        elif idx == 1: self.edit_key("OMDB API Key", OMDB_KEY_FILE)
-        elif idx == 2: self.edit_key("GROQ API Key", GROQ_KEY_FILE)
-        elif idx == 3: self.edit_key("SUBDL API Key", SUBDL_KEY_FILE)
-        elif idx == 15: self._clear_cache()
-        elif idx == 16: self.test_tmdb()
+        if idx == 0:
+            self.edit_key("TMDB API Key", TMDB_KEY_FILE)
+        elif idx == 1:
+            self.edit_key("OMDB API Key", OMDB_KEY_FILE)
+        elif idx == 2:
+            self.edit_key("GROQ API Key", GROQ_KEY_FILE, config_field="groq_api_key")
+        elif idx == 3:
+            self.edit_key("SUBDL API Key", SUBDL_KEY_FILE)
+        elif idx == 15:
+            self._clear_cache()
+        elif idx == 16:
+            self.test_tmdb()
 
     def _change_option(self, idx, direction):
         if idx == 5:  # Skin Type
@@ -161,7 +184,7 @@ class SettingsScreen(Screen):
             config.plugins.ciefpxfiles.skin_type.value = choices[new_idx]
 
         elif idx == 6:  # TMDB Language
-            choices = ["en", "sr", "hr", "bs", "de", "fr", "es", "it", "ru"]
+            choices = self.TMDB_LANGUAGES
             current = config.plugins.ciefpxfiles.tmdb_language.value
             new_idx = (choices.index(current) + direction) % len(choices) if current in choices else 0
             config.plugins.ciefpxfiles.tmdb_language.value = choices[new_idx]
@@ -170,10 +193,10 @@ class SettingsScreen(Screen):
             config.plugins.ciefpxfiles.groq_plot_translation.value = not config.plugins.ciefpxfiles.groq_plot_translation.value
 
         elif idx == 8:  # GROQ Translate Lang
-            choices = ["sr", "hr", "en", "de", "fr", "es", "it", "ru"]
-            current = config.plugins.ciefpxfiles.subtitle_language.value
+            choices = self.TRANSLATE_LANGUAGES
+            current = config.plugins.ciefpxfiles.translate_language.value
             new_idx = (choices.index(current) + direction) % len(choices) if current in choices else 0
-            config.plugins.ciefpxfiles.subtitle_language.value = choices[new_idx]
+            config.plugins.ciefpxfiles.translate_language.value = choices[new_idx]
 
         elif idx == 9:  # Live Player
             choices = ["5002", "5001", "4097"]
@@ -188,7 +211,7 @@ class SettingsScreen(Screen):
             config.plugins.ciefpxfiles.player_type_vod.value = choices[new_idx]
 
         elif idx == 11:  # Subtitle Language
-            choices = ["sr", "hr", "en", "de", "fr", "es", "it", "ru"]
+            choices = self.TRANSLATE_LANGUAGES
             current = config.plugins.ciefpxfiles.subtitle_language.value
             new_idx = (choices.index(current) + direction) % len(choices) if current in choices else 0
             config.plugins.ciefpxfiles.subtitle_language.value = choices[new_idx]
@@ -201,7 +224,6 @@ class SettingsScreen(Screen):
 
         self.build_menu()
 
-
     def on_left(self):
         idx = self["menu"].getSelectedIndex()
         self._change_option(idx, -1)
@@ -210,7 +232,7 @@ class SettingsScreen(Screen):
         idx = self["menu"].getSelectedIndex()
         self._change_option(idx, 1)
 
-    def edit_key(self, title, filename_or_config, is_file=True):
+    def edit_key(self, title, filename_or_config, is_file=True, config_field=None):
         if is_file:
             current = self._read_key(filename_or_config)
         else:
@@ -220,11 +242,18 @@ class SettingsScreen(Screen):
             if res is not None:
                 if is_file:
                     if self._write_key(filename_or_config, res):
+                        # Sinhronizuj u config ako je zadato polje
+                        if config_field:
+                            try:
+                                getattr(config.plugins.ciefpxfiles, config_field).value = res.strip()
+                            except Exception as e:
+                                print(f"[CiefpXfiles] Config sync error: {e}")
                         self["status"].setText(f"{title} saved.")
                 else:
                     filename_or_config.value = res
                     self["status"].setText(f"{title} saved.")
                 self.build_menu()
+
         self.session.openWithCallback(cb, VirtualKeyBoard, title=title, text=current)
 
     def save_settings(self):

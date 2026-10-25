@@ -10,12 +10,30 @@ config.plugins.ciefpxfiles.omdb_api_key = ConfigText(default="", fixed_size=Fals
 config.plugins.ciefpxfiles.groq_api_key = ConfigText(default="", fixed_size=False)
 config.plugins.ciefpxfiles.subdl_api_key = ConfigText(default="", fixed_size=False)
 
-# Jezici
+# --- DEFINICIJA LISTE JEZIKA (zajednička za više opcija) ---
 LANG_CHOICES = [
-    ("en", "English"), ("sr", "Srpski"), ("hr", "Hrvatski"), 
-    ("bs", "Bosanski"), ("de", "Deutsch"), ("fr", "Français"), 
-    ("es", "Español"), ("it", "Italiano"), ("ru", "Русский")
+    ("sr", "Srpski"), ("hr", "Hrvatski"), ("bs", "Bosanski"),
+    ("sl", "Slovenščina"), ("mk", "Македонски"), ("en", "English"),
+    ("de", "Deutsch"), ("fr", "Français"), ("es", "Español"),
+    ("it", "Italiano"), ("ru", "Русский"), ("pt", "Português"),
+    ("pl", "Polski"), ("cs", "Čeština"), ("hu", "Magyar"),
+    ("ro", "Română"), ("bg", "Български"), ("el", "Ελληνικά"),
+    ("tr", "Türkçe"),
+    ("nl", "Nederlands"),
+    ("sv", "Svenska"),
+    ("da", "Dansk"),
+    ("fi", "Suomi"),
+    ("no", "Norsk"),
+    ("he", "עברית"),
+    ("ja", "日本語"),
+    ("ko", "한국어"),
+    ("zh", "中文"),
+    ("hi", "हिन्दी"),
+    ("vi", "Tiếng Việt"),
 ]
+
+# DODATO: translate_language
+config.plugins.ciefpxfiles.translate_language = ConfigSelection(default="sr", choices=LANG_CHOICES)
 config.plugins.ciefpxfiles.tmdb_language = ConfigSelection(default="en", choices=LANG_CHOICES)
 config.plugins.ciefpxfiles.subtitle_language = ConfigSelection(default="sr", choices=LANG_CHOICES)
 
@@ -30,6 +48,7 @@ config.plugins.ciefpxfiles.groq_model = ConfigSelection(default="openai/gpt-oss-
     ("openai/gpt-oss-120b", "GPT-OSS 120B (Snažniji)"),
     ("qwen/qwen3.8-27b", "Qwen 3.8 27B"),
 ])
+
 # Plejeri
 PLAYER_CHOICES = [
     ("5002", "Exteplayer3 (5002)"),
@@ -46,15 +65,7 @@ config.plugins.ciefpxfiles.epg_interval_hours = ConfigSelection(default="12", ch
 ])
 config.plugins.ciefpxfiles.adult_content = ConfigYesNo(default=False)
 config.plugins.ciefpxfiles.use_subssupport = ConfigYesNo(default=True)
-config.plugins.ciefpxfiles.subtitle_language = ConfigSelection(default="sr", choices=[
-    ("sr", "Srpski"), ("hr", "Hrvatski"), ("en", "English"),
-    ("de", "Deutsch"), ("fr", "Français"), ("es", "Español"),
-    ("it", "Italiano"), ("ru", "Русский")
-])
-config.plugins.ciefpxfiles.subtitle_location = ConfigText(default="/media/hdd/subtitles/", fixed_size=False)
-config.plugins.ciefpxfiles.epg_auto_update = ConfigYesNo(default=True)
-config.plugins.ciefpxfiles.adult_content = ConfigYesNo(default=False)
-config.plugins.ciefpxfiles.use_subssupport = ConfigYesNo(default=True)
+
 # Tip skina (Classic / Modern)
 config.plugins.ciefpxfiles.skin_type = ConfigSelection(default="classic", choices=[
     ("classic", "Classic"),

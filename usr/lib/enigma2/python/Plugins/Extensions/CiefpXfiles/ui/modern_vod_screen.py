@@ -12,6 +12,7 @@ from Components.Pixmap import Pixmap
 from Screens.Screen import Screen
 from Screens.InfoBar import MoviePlayer
 from Screens.MessageBox import MessageBox
+from Screens.VirtualKeyBoard import VirtualKeyBoard
 from enigma import eTimer, eServiceReference, eLabel, ePoint, loadPNG
 from Tools.LoadPixmap import LoadPixmap
 
@@ -66,7 +67,7 @@ class ModernVODScreen(Screen):
                 zPosition="10"
                 alphatest="on"/>
             <!-- GLAVNI NASLOV FILMA -->
-            <widget name="movie_title" position="50,100" size="1000,80" font="Bold;52"
+            <widget name="movie_title" position="50,100" size="1400,80" font="Bold;52"
                     foregroundColor="#FFFFFF" backgroundColor="#00000000" transparent="1" zPosition="3"/>
 
             <!-- INFO PANEL -->
@@ -102,7 +103,7 @@ class ModernVODScreen(Screen):
 
             <!-- PAGINACIJA -->
             <widget name="page_info" position="50,980" size="400,40" font="Regular;24"
-                    foregroundColor="#AAAAAA" backgroundColor="#00000000" transparent="1" zPosition="3"/>
+                    foregroundColor="#00FF00" backgroundColor="#00000000" transparent="1" zPosition="3"/>
 
             <!-- STATUS -->
             <widget name="status" position="500,980" size="1000,40" font="Regular;24"
@@ -124,6 +125,10 @@ class ModernVODScreen(Screen):
             <ePixmap pixmap="buttons/blue.png" position="750,1020" size="35,35" alphatest="blend" zPosition="4"/>
             <eLabel text="NEXT 10" position="800,1015" size="200,45" font="Bold;28"
                     foregroundColor="white" backgroundColor="#000080" halign="center" valign="center" zPosition="4"/>
+            
+            <ePixmap pixmap="buttons/green.png" position="1000,1020" size="35,35" alphatest="blend" zPosition="4"/>
+            <eLabel text="INFO:SEARCH" position="1050,1015" size="300,45" font="Bold;28"
+                    foregroundColor="white" backgroundColor="#00802d" halign="center" valign="center" zPosition="4"/>        
         </screen>
     """
 
@@ -163,7 +168,7 @@ class ModernVODScreen(Screen):
             self["poster_%d" % i] = Pixmap()
 
         self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions"],
+            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions", "InfoActions"],
             {
                 "cancel": self.close,
                 "red": self.close,
@@ -175,6 +180,7 @@ class ModernVODScreen(Screen):
                 "right": self.on_right,
                 "up": self.on_up,
                 "down": self.on_down,
+                "info": self.search_content,
             }, -1
         )
 
@@ -468,8 +474,14 @@ class ModernVODScreen(Screen):
             plot = data.get("plot", "-")
             if len(plot) > 400:
                 plot = plot[:400] + "..."
-            self["plot"].setText(plot)
 
+            # --- DODATO ZA PREVOD ---
+            if config.plugins.ciefpxfiles.groq_plot_translation.value:
+                self["plot"].setText(f"Plot:\n{plot}\n\n(Translating...)")
+                translate_text_async(plot, self._on_translated_plot)
+            else:
+                self["plot"].setText(f"Plot:\n{plot}")
+            # -------------------------
             # IMDb ocena
             self["imdb_rating"].setText("IMDB: Loading...")
             fetch_omdb_rating_async(data.get('title'), data.get('year'), self._on_imdb_data)
@@ -507,6 +519,25 @@ class ModernVODScreen(Screen):
         self._imdb_ui_timer = eTimer()
         self._imdb_ui_timer.callback.append(_update_ui)
         self._imdb_ui_timer.start(10, True)
+
+    def _on_translated_plot(self, success, translated_text):
+        def _update_ui():
+            if success:
+                try:
+                    lang = config.plugins.ciefpxfiles.translate_language.value.upper()
+                except Exception:
+                    lang = "PREVOD"
+                self["plot"].setText(f"Plot ({lang}):\n{translated_text}")
+            else:
+                current_text = self["plot"].getText()
+                if "(Translating...)" in current_text:
+                    self["plot"].setText(current_text.replace("(Translating...)", f"(Prevod nije uspeo: {translated_text})"))
+                else:
+                    self["plot"].setText(current_text + f"\n\n(Prevod nije uspeo: {translated_text})")
+
+        self._trans_timer = eTimer()
+        self._trans_timer.callback.append(_update_ui)
+        self._trans_timer.start(10, True)
 
     def on_left(self):
         if self.selected_index > 0:
@@ -583,6 +614,34 @@ class ModernVODScreen(Screen):
             )
         except Exception as e:
             self["status"].setText(f"Could not open player: {e}")
+
+    def search_content(self):
+        def do_search(search_term):
+            if not search_term:
+                return
+            search_term = search_term.lower()
+            # Čuvamo originalnu listu pre filtriranja ako već nismo
+            if not hasattr(self, '_original_streams'):
+                self._original_streams = self.streams
+
+            filtered = [s for s in self._original_streams if search_term in s.get("name", "").lower()]
+
+            if not filtered:
+                self.session.open(MessageBox, f"No results for: '{search_term}'", MessageBox.TYPE_INFO, timeout=3)
+                # Resetujemo na original ako nema rezultata
+                self.streams = self._original_streams
+                self.current_page = 0
+                self.selected_index = 0
+                self.render_page()
+                return
+
+            self.streams = filtered
+            self.current_page = 0
+            self.selected_index = 0
+            self.render_page()
+            self["status"].setText(f"Found {len(self.streams)} results for '{search_term}'")
+
+        self.session.openWithCallback(do_search, VirtualKeyBoard, title="Search Movies", text="")
 
     def _on_player_closed(self, *args):
         self["status"].setText("Returned to Modern VOD.")

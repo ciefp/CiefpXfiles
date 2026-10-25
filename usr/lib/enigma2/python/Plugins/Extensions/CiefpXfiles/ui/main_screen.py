@@ -521,11 +521,20 @@ class MainScreen(Screen):
         from enigma import eTimer
         def _update_ui():
             if success:
-                self["plot"].setText(f"Plot (SR):\n{translated_text}")
+                # Uzimamo trenutni jezik iz config-a da prikažemo tačan naziv
+                try:
+                    from ..core.config import config
+                    lang = config.plugins.ciefpxfiles.translate_language.value.upper()
+                except Exception:
+                    lang = "PREVOD"
+
+                # Prikazujemo npr. "Plot (TR):" ili "Plot (SR):"
+                self["plot"].setText(f"Plot ({lang}):\n{translated_text}")
             else:
                 current_text = self["plot"].getText()
                 if "(Translating...)" in current_text:
-                    self["plot"].setText(current_text.replace("(Translating...)", f"(Prevod nije uspeo: {translated_text})"))
+                    self["plot"].setText(
+                        current_text.replace("(Translating...)", f"(Prevod nije uspeo: {translated_text})"))
                 else:
                     self["plot"].setText(current_text + f"\n\n(Prevod nije uspeo: {translated_text})")
 
