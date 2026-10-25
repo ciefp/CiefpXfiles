@@ -110,6 +110,7 @@ class SettingsScreen(Screen):
         g_trans = "YES" if config.plugins.ciefpxfiles.groq_plot_translation.value else "NO"
         p_live = config.plugins.ciefpxfiles.player_type_live.value
         p_vod = config.plugins.ciefpxfiles.player_type_vod.value
+        skin_type = config.plugins.ciefpxfiles.skin_type.value
 
         # Ostale opcije
         sub_lang = getattr(config.plugins.ciefpxfiles, 'subtitle_language',
@@ -122,75 +123,84 @@ class SettingsScreen(Screen):
         cache_mb = self._get_cache_size()
 
         items = [
-            f"TMDB API Key:         {tmdb}",
-            f"OMDB API Key:         {omdb}",
-            f"GROQ API Key:         {groq}",
-            f"SUBDL API Key:        {subdl}",
-            "----------------------------------------",
-            f"TMDB Language:        {t_lang}",
-            f"GROQ Translate Plot:  {g_trans}",
-            f"GROQ Translate Lang:  {sub_lang}",
-            f"Live Player Type:     {p_live}",
-            f"VOD Player Type:      {p_vod}",
-            f"Subtitle Language:    {sub_lang}",
-            f"EPG Auto Update:      {epg_auto}",
-            f"Adult Content:        {adult}",
-            "----------------------------------------",
-            f"Clear Cache:          {cache_mb:.1f} MB",
-            ">>> TEST TMDB CONNECTION <<<"
+            f"TMDB API Key:         {tmdb}",           # 0
+            f"OMDB API Key:         {omdb}",           # 1
+            f"GROQ API Key:         {groq}",           # 2
+            f"SUBDL API Key:        {subdl}",          # 3
+            "----------------------------------------", # 4
+            f"Skin Type:            {skin_type}",      # 5  <-- NOVO
+            f"TMDB Language:        {t_lang}",         # 6
+            f"GROQ Translate Plot:  {g_trans}",        # 7
+            f"GROQ Translate Lang:  {sub_lang}",       # 8
+            f"Live Player Type:     {p_live}",         # 9
+            f"VOD Player Type:      {p_vod}",          # 10
+            f"Subtitle Language:    {sub_lang}",       # 11
+            f"EPG Auto Update:      {epg_auto}",       # 12
+            f"Adult Content:        {adult}",          # 13
+            "----------------------------------------", # 14
+            f"Clear Cache:          {cache_mb:.1f} MB",# 15
+            ">>> TEST TMDB CONNECTION <<<"             # 16
         ]
 
         self["menu"].setList(items)
 
     def on_ok(self):
         idx = self["menu"].getSelectedIndex()
-        if idx == 0:
-            self.edit_key("TMDB API Key", TMDB_KEY_FILE)
-        elif idx == 1:
-            self.edit_key("OMDB API Key", OMDB_KEY_FILE)
-        elif idx == 2:
-            self.edit_key("GROQ API Key", GROQ_KEY_FILE)
-        elif idx == 3:
-            self.edit_key("SUBDL API Key", SUBDL_KEY_FILE)
-        elif idx == 14:
-            self._clear_cache()
-        elif idx == 15:
-            self.test_tmdb()
+        if idx == 0: self.edit_key("TMDB API Key", TMDB_KEY_FILE)
+        elif idx == 1: self.edit_key("OMDB API Key", OMDB_KEY_FILE)
+        elif idx == 2: self.edit_key("GROQ API Key", GROQ_KEY_FILE)
+        elif idx == 3: self.edit_key("SUBDL API Key", SUBDL_KEY_FILE)
+        elif idx == 15: self._clear_cache()
+        elif idx == 16: self.test_tmdb()
 
     def _change_option(self, idx, direction):
-        if idx == 5:  # TMDB Language
+        if idx == 5:  # Skin Type
+            choices = ["classic", "modern"]
+            current = config.plugins.ciefpxfiles.skin_type.value
+            new_idx = (choices.index(current) + direction) % len(choices) if current in choices else 0
+            config.plugins.ciefpxfiles.skin_type.value = choices[new_idx]
+
+        elif idx == 6:  # TMDB Language
             choices = ["en", "sr", "hr", "bs", "de", "fr", "es", "it", "ru"]
             current = config.plugins.ciefpxfiles.tmdb_language.value
             new_idx = (choices.index(current) + direction) % len(choices) if current in choices else 0
             config.plugins.ciefpxfiles.tmdb_language.value = choices[new_idx]
-        elif idx == 6:  # GROQ Translate Plot
+
+        elif idx == 7:  # GROQ Translate Plot
             config.plugins.ciefpxfiles.groq_plot_translation.value = not config.plugins.ciefpxfiles.groq_plot_translation.value
-        elif idx == 7:  # GROQ Translate Lang
+
+        elif idx == 8:  # GROQ Translate Lang
             choices = ["sr", "hr", "en", "de", "fr", "es", "it", "ru"]
             current = config.plugins.ciefpxfiles.subtitle_language.value
             new_idx = (choices.index(current) + direction) % len(choices) if current in choices else 0
             config.plugins.ciefpxfiles.subtitle_language.value = choices[new_idx]
-        elif idx == 8:  # Live Player
+
+        elif idx == 9:  # Live Player
             choices = ["5002", "5001", "4097"]
             current = config.plugins.ciefpxfiles.player_type_live.value
             new_idx = (choices.index(current) + direction) % len(choices) if current in choices else 0
             config.plugins.ciefpxfiles.player_type_live.value = choices[new_idx]
-        elif idx == 9:  # VOD Player
+
+        elif idx == 10:  # VOD Player
             choices = ["5002", "5001", "4097"]
             current = config.plugins.ciefpxfiles.player_type_vod.value
             new_idx = (choices.index(current) + direction) % len(choices) if current in choices else 0
             config.plugins.ciefpxfiles.player_type_vod.value = choices[new_idx]
-        elif idx == 10:  # Subtitle Language
+
+        elif idx == 11:  # Subtitle Language
             choices = ["sr", "hr", "en", "de", "fr", "es", "it", "ru"]
             current = config.plugins.ciefpxfiles.subtitle_language.value
             new_idx = (choices.index(current) + direction) % len(choices) if current in choices else 0
             config.plugins.ciefpxfiles.subtitle_language.value = choices[new_idx]
-        elif idx == 11:  # EPG Auto Update
+
+        elif idx == 12:  # EPG Auto Update
             config.plugins.ciefpxfiles.epg_auto_update.value = not config.plugins.ciefpxfiles.epg_auto_update.value
-        elif idx == 12:  # Adult Content
+
+        elif idx == 13:  # Adult Content
             config.plugins.ciefpxfiles.adult_content.value = not config.plugins.ciefpxfiles.adult_content.value
 
         self.build_menu()
+
 
     def on_left(self):
         idx = self["menu"].getSelectedIndex()

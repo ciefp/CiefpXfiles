@@ -186,8 +186,16 @@ def fetch_metadata_async(title, media_type, callback):
             if poster_path:
                 poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
                 poster_filename = f"{media_type}_{tmdb_id}.jpg"
-                info["poster_path"] = _download_image(poster_url, poster_filename)
+                local_path = _download_image(poster_url, poster_filename)
+                print(f"[CiefpXfiles] Poster downloaded to: {local_path}")
+                if local_path and os.path.exists(local_path):
+                    info["poster_path"] = local_path
+                    print(f"[CiefpXfiles] Poster set to: {info['poster_path']}")
+                else:
+                    print(f"[CiefpXfiles] Poster download failed or file not exists")
 
+            # DODAJ OVO:
+            info["backdrop_path"] = details.get("backdrop_path")
             callback(True, info)
 
         except Exception as e:

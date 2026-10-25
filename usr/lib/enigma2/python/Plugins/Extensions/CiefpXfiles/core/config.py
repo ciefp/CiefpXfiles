@@ -55,3 +55,8 @@ config.plugins.ciefpxfiles.subtitle_location = ConfigText(default="/media/hdd/su
 config.plugins.ciefpxfiles.epg_auto_update = ConfigYesNo(default=True)
 config.plugins.ciefpxfiles.adult_content = ConfigYesNo(default=False)
 config.plugins.ciefpxfiles.use_subssupport = ConfigYesNo(default=True)
+# Tip skina (Classic / Modern)
+config.plugins.ciefpxfiles.skin_type = ConfigSelection(default="classic", choices=[
+    ("classic", "Classic"),
+    ("modern", "Modern"),
+])

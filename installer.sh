@@ -2,7 +2,7 @@
 ##setup command=wget -q "--no-check-certificate" https://raw.githubusercontent.com/ciefp/CiefpXfiles/main/installer.sh -O - | /bin/sh
 
 ######### Only This 2 lines to edit with new version ######
-version='1.0.0'
+version='1.0.5'
 changelog='\n- Initial release\n- Xtream Codes API support\n- TMDB/OMDb metadata\n- GROQ translation\n- FHD 3-panel interface\n- Portal status checker\n- Settings screen with API keys'
 ##############################################################
 

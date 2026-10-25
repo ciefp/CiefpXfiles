@@ -25,6 +25,7 @@ from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async, trans
 from .settings_screen import SettingsScreen
 from ..core.config import config
 from .live_screen import LiveScreen
+from .vod_groups_screen import VODGroupsScreen
 
 def _load_pixmap_safe(path):
     if path and os.path.exists(path):
@@ -167,19 +168,19 @@ class MainScreen(Screen):
 
         # Actions
         self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions", "InfoActions", "HelpActions"],
+            ["OkCancelActions", "ColorActions", "DirectionActions", "MenuActions", "InfoActions"],
             {
                 "cancel": self.close,
                 "red": self.close,
                 "green": self.open_live_screen,
-                "yellow": self.show_movies,
-                "blue": self.show_series,
+                "yellow": self.open_movies_groups,
+                "blue": self.open_series_groups,
                 "ok": self.on_ok,
                 "up": self.on_up,
                 "down": self.on_down,
                 "menu": self.open_settings,
                 "info": self.search_content,
-                "help": self.search_content,
+                # "help": self.search_content,  # UKLONJENO
             }, -1
         )
 
@@ -284,6 +285,19 @@ class MainScreen(Screen):
         self["left_list"].setList(items)
         self["plot"].setText(
             "Welcome to CiefpXfiles.\n\nPress GREEN for Live TV, YELLOW for Movies, or BLUE for Series.")
+
+    def test_modern_vod(self):
+        from .modern_vod_screen import ModernVODScreen
+        # Uzimamo prvu VOD kategoriju za test
+        if self.categories and self.current_view == "VOD":
+            cat = self.categories[0]
+            self.session.open(ModernVODScreen, self.portal, cat.get("category_id"), cat.get("category_name"))
+        else:
+            # Ako nismo u VOD, prvo učitajmo VOD kategorije
+            ok, data, err = self.api.get_vod_categories()
+            if ok and data:
+                cat = data[0]
+                self.session.open(ModernVODScreen, self.portal, cat.get("category_id"), cat.get("category_name"))
 
     def show_movies(self):
         self.current_view = "VOD"
@@ -527,9 +541,9 @@ class MainScreen(Screen):
             if idx == 1:
                 self.open_live_screen()
             elif idx == 2:
-                self.show_movies()
+                self.open_movies_groups()
             elif idx == 3:
-                self.show_series()
+                self.open_series_groups()
             return
 
         if self.current_category is None:
@@ -867,3 +881,20 @@ class MainScreen(Screen):
         
     def open_live_screen(self):
         self.session.open(LiveScreen, self.portal, None)
+
+    def open_movies_groups(self):
+        skin_type = config.plugins.ciefpxfiles.skin_type.value
+        if skin_type == "modern":
+            from .vod_groups_screen import VODGroupsScreen
+            self.session.open(VODGroupsScreen, self.portal)
+        else:
+            # Classic - otvori stari prikaz za filmove
+            self.show_movies()
+
+    def open_series_groups(self):
+        skin_type = config.plugins.ciefpxfiles.skin_type.value
+        if skin_type == "modern":
+            from .series_groups_screen import SeriesGroupsScreen
+            self.session.open(SeriesGroupsScreen, self.portal)
+        else:
+            self.show_series()
