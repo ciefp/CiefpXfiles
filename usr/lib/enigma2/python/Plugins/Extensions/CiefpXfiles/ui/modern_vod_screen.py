@@ -16,6 +16,7 @@ from Screens.VirtualKeyBoard import VirtualKeyBoard
 from enigma import eTimer, eServiceReference, eLabel, ePoint, loadPNG
 from Tools.LoadPixmap import LoadPixmap
 
+from .modern_vod_details import ModernVODDetailsScreen
 from ..core.xtream_api import XtreamAPI
 from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async, translate_text_async
 from ..core.config import config
@@ -67,7 +68,7 @@ class ModernVODScreen(Screen):
                 zPosition="10"
                 alphatest="on"/>
             <!-- GLAVNI NASLOV FILMA -->
-            <widget name="movie_title" position="50,100" size="1400,80" font="Bold;52"
+            <widget name="movie_title" position="50,80" size="1800,70" font="Bold;50"
                     foregroundColor="#FFFFFF" backgroundColor="#00000000" transparent="1" zPosition="3"/>
 
             <!-- INFO PANEL -->
@@ -128,7 +129,11 @@ class ModernVODScreen(Screen):
             
             <ePixmap pixmap="buttons/green.png" position="1000,1020" size="35,35" alphatest="blend" zPosition="4"/>
             <eLabel text="INFO:SEARCH" position="1050,1015" size="300,45" font="Bold;28"
-                    foregroundColor="white" backgroundColor="#00802d" halign="center" valign="center" zPosition="4"/>        
+                    foregroundColor="white" backgroundColor="#00802d" halign="center" valign="center" zPosition="4"/>  
+                        
+            <ePixmap pixmap="buttons/red.png" position="1350,1020" size="35,35" alphatest="blend" zPosition="4"/>
+            <eLabel text="MENU:DETAIL" position="1400,1015" size="300,45" font="Bold;28"
+                    foregroundColor="white" backgroundColor="#800073" halign="center" valign="center" zPosition="4"/>                
         </screen>
     """
 
@@ -181,6 +186,7 @@ class ModernVODScreen(Screen):
                 "up": self.on_up,
                 "down": self.on_down,
                 "info": self.search_content,
+                "menu": self.open_details,   # <-- DODATO
             }, -1
         )
 
@@ -465,6 +471,8 @@ class ModernVODScreen(Screen):
                 self["plot"].setText("TMDB Metadata not found.")
                 return
 
+            self._current_tmdb_data = data  # <-- DODATO: Čuvamo podatke za Details ekran
+
             self["movie_title"].setText(f"{data.get('title', 'Unknown')} ({data.get('year', '')})")
             self["rating"].setText(f"TMDB: {data.get('rating', '0.0')}/10")
             self["genres"].setText(f"Genres: {data.get('genres', '-')}")
@@ -645,3 +653,29 @@ class ModernVODScreen(Screen):
 
     def _on_player_closed(self, *args):
         self["status"].setText("Returned to Modern VOD.")
+
+    def open_details(self):
+        start_idx = self.current_page * self.items_per_page
+        stream_idx = start_idx + self.selected_index
+
+        if stream_idx >= len(self.streams):
+            return
+
+        stream = self.streams[stream_idx]
+        title = stream.get("name", "Unknown")
+
+        # Uzimamo trenutne TMDB podatke koje smo već preuzeli za ovaj film
+        # (Moramo ih sačuvati u _on_tmdb_data)
+        tmdb_data = getattr(self, '_current_tmdb_data', None)
+
+        if not tmdb_data:
+            self.session.open(MessageBox, "TMDB data not loaded yet. Please wait a moment.", MessageBox.TYPE_INFO,
+                              timeout=3)
+            return
+
+        self.session.open(
+            ModernVODDetailsScreen,
+            self.portal,
+            stream,
+            tmdb_data
+        )

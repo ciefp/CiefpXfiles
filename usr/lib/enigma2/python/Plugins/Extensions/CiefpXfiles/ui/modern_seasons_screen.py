@@ -18,6 +18,7 @@ from Screens.MessageBox import MessageBox
 from enigma import eTimer, eServiceReference, eListboxPythonMultiContent, gFont, loadPNG, RT_HALIGN_LEFT, RT_VALIGN_CENTER
 from Tools.LoadPixmap import LoadPixmap
 
+from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async
 from ..core.xtream_api import XtreamAPI
 from ..core.config import config
 def _load_pixmap_safe(path):
@@ -40,21 +41,52 @@ class ModernSeasonsScreen(Screen):
                     halign="center" valign="center" foregroundColor="#FFFFFF"
                     backgroundColor="#011a2e" transparent="1"/>
 
-            <widget name="left_list" position="40,110" size="900,850"
+            <!-- LEVI PANEL: Sezone / Epizode -->
+            <widget name="left_list" position="40,110" size="500,850"
                     scrollbarMode="showOnDemand" itemHeight="50"
                     font="Regular;26" backgroundColor="#011a2e"/>
-            <!-- LOGO -->
-            <widget name="logo" position="1300,100" size="560,780" alphatest="blend" zPosition="2"/>
-            <widget name="status" position="40,980" size="1000,40"
+
+            <!-- SREDNJI PANEL: Informacije o seriji -->
+            <widget name="movie_title" position="570,110" size="550,40" font="Bold;34"
+                    foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1"/>
+
+            <widget name="rating" position="570,230" size="550,30" font="Regular;24"
+                    foregroundColor="#03a81f" backgroundColor="#011a2e" transparent="1"/>
+
+            <widget name="imdb_rating" position="570,270" size="550,30" font="Regular;24"
+                    foregroundColor="#F5C518" backgroundColor="#011a2e" transparent="1"/>
+
+            <widget name="genres" position="570,310" size="550,30" font="Regular;24"
+                    foregroundColor="#f702db" backgroundColor="#011a2e" transparent="1"/>
+
+            <widget name="director" position="570,350" size="550,30" font="Regular;24"
+                    foregroundColor="#f79102" backgroundColor="#011a2e" transparent="1"/>
+
+            <widget name="plot" position="570,390" size="700,400" font="Regular;24"
+                    foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1" valign="top"/>
+
+            <widget name="cast_header" position="570,800" size="550,30" font="Bold;24"
+                    foregroundColor="#00FFFF" backgroundColor="#011a2e" transparent="1"/>
+
+            <widget name="cast" position="570,840" size="550,120" font="Regular;20"
+                    foregroundColor="#00FFFF" backgroundColor="#011a2e" transparent="1" valign="top"/>
+
+            <!-- DESNI PANEL: Poster -->
+            <widget name="logo" position="1320,110" size="500,750"
+                    alphatest="blend" zPosition="2"/>
+
+            <!-- STATUS -->
+            <widget name="status" position="720,950" size="1000,40"
                     font="Regular;24" halign="left" valign="center"
                     foregroundColor="#00FF00" backgroundColor="#011a2e" transparent="1"/>
 
-            <ePixmap pixmap="buttons/red.png" position="0,1020" size="35,35" alphatest="blend"/>
-            <eLabel text="EXIT" position="50,1015" size="180,45" font="Bold;28"
+            <!-- DUGMAD -->
+            <ePixmap pixmap="buttons/red.png" position="0,1005" size="35,35" alphatest="blend"/>
+            <eLabel text="EXIT" position="50,1000" size="180,45" font="Bold;28"
                     foregroundColor="white" backgroundColor="#800000" halign="center" valign="center"/>
-            
-            <ePixmap pixmap="buttons/green.png" position="240,1020" size="35,35" alphatest="blend"/>
-            <eLabel text="PLAY" position="290,1015" size="180,45" font="Bold;28"
+
+            <ePixmap pixmap="buttons/green.png" position="240,1005" size="35,35" alphatest="blend"/>
+            <eLabel text="PLAY" position="290,1000" size="180,45" font="Bold;28"
                     foregroundColor="white" backgroundColor="#008000" halign="center" valign="center"/>
         </screen>
     """
@@ -84,6 +116,14 @@ class ModernSeasonsScreen(Screen):
         self["left_list"].l.setItemHeight(50)
         self["left_list"].l.setFont(0, gFont("Regular", 26))
         self["logo"] = Pixmap()
+        self["movie_title"] = Label("")
+        self["rating"] = Label("")
+        self["imdb_rating"] = Label("")
+        self["genres"] = Label("")
+        self["director"] = Label("")
+        self["plot"] = Label("")
+        self["cast_header"] = Label("")
+        self["cast"] = Label("")
         self["status"] = Label("")
 
         self["actions"] = ActionMap(
@@ -119,6 +159,9 @@ class ModernSeasonsScreen(Screen):
                     self["logo"].show()
 
         self["status"].setText("Loading seasons...")
+        self._fetch_metadata()
+        self["status"].setText("Loading seasons...")
+        self.load_seasons()
         self.load_seasons()
 
     def load_seasons(self):
@@ -269,6 +312,58 @@ class ModernSeasonsScreen(Screen):
 
     def _on_player_closed(self, *args):
         self["status"].setText("Returned to series.")
+
+    def _fetch_metadata(self):
+        # Preuzimamo TMDB podatke za seriju na osnovu njenog naslova
+        def _do_fetch():
+            fetch_metadata_async(self.series_title, "tv", self._on_tmdb_data)
+
+        self._tmdb_timer = eTimer()
+        self._tmdb_timer.callback.append(_do_fetch)
+        self._tmdb_timer.start(300, True)
+
+    def _on_tmdb_data(self, success, data):
+        def _update_ui():
+            if not success or not data:
+                self["plot"].setText("TMDB Metadata not found.")
+                return
+
+            self["movie_title"].setText(f"{data.get('title', 'Unknown')} ({data.get('year', '')})")
+            self["rating"].setText(f"TMDB: {data.get('rating', '0.0')}/10 ★")
+            self["genres"].setText(f"Genres: {data.get('genres', '-')}")
+            self["director"].setText(f"Creator: {data.get('director', '-')}")
+            self["cast"].setText(f"Cast: {data.get('cast', '-')}")
+
+            cast = data.get('cast', '-')
+            if cast != '-':
+                self["cast_header"].setText("Cast:")
+                self["cast"].setText(cast)
+            else:
+                self["cast_header"].setText("")
+                self["cast"].setText("")
+
+            plot = data.get("plot", "-")
+            if len(plot) > 450:
+                plot = plot[:450] + "..."
+            self["plot"].setText(f"Plot:\n{plot}")
+
+            self["imdb_rating"].setText("IMDB: Loading...")
+            fetch_omdb_rating_async(data.get('title'), data.get('year'), self._on_imdb_data)
+
+        self._tmdb_ui_timer = eTimer()
+        self._tmdb_ui_timer.callback.append(_update_ui)
+        self._tmdb_ui_timer.start(10, True)
+
+    def _on_imdb_data(self, success, rating):
+        def _update_ui():
+            if success:
+                self["imdb_rating"].setText(f"IMDB: {rating}/10 ★")
+            else:
+                self["imdb_rating"].setText("IMDB: N/A")
+
+        self._imdb_ui_timer = eTimer()
+        self._imdb_ui_timer.callback.append(_update_ui)
+        self._imdb_ui_timer.start(10, True)
 
     def on_back(self):
         if self.is_showing_episodes:

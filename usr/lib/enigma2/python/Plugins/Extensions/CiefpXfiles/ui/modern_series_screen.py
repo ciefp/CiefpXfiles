@@ -65,7 +65,7 @@ class ModernSeriesScreen(Screen):
             <widget name="selection_frame" position="50,700" size="176,256" zPosition="10" alphatest="on"/>
 
             <!-- INFO PANEL -->
-            <widget name="movie_title" position="50,100" size="1000,80" font="Bold;52"
+            <widget name="movie_title" position="50,80" size="1000,70" font="Bold;50"
                     foregroundColor="#FFFFFF" backgroundColor="#40000000" transparent="1" zPosition="3"/>
             
             <widget name="rating" position="50,190" size="400,40" font="Bold;28"

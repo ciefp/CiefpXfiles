@@ -369,7 +369,7 @@ class MainScreen(Screen):
             self._update_info()
         except Exception:
             pass
-            
+
     def _update_info(self):
         idx = self["left_list"].getSelectedIndex()
 
@@ -382,7 +382,9 @@ class MainScreen(Screen):
         if idx == 0:
             self._clear_info_panel()
             self["movie_title"].setText("Go back to previous menu.")
-            self._set_poster(None)
+            # IZMENA: Ako smo u sezonama ili epizodama, NE brišemo poster!
+            if not self.current_series:
+                self._set_poster(None)
             return
 
         # 1. KATEGORIJE
@@ -468,6 +470,9 @@ class MainScreen(Screen):
             if not success:
                 self["plot"].setText(f"TMDB Error: {data}")
                 return
+
+            # DODAJTE OVU LINIJU:
+            self._current_poster_path = data.get("poster_path")
 
             plot = data.get("plot", "-")
             if len(plot) > 450:
@@ -686,10 +691,15 @@ class MainScreen(Screen):
                 "Could not open player: {}".format(e)
             )
             print("[CiefpXfiles] MoviePlayer error: {}".format(e))
-            
+
     def _open_series(self, series_data):
         series_id = series_data.get("series_id")
         series_name = series_data.get("name", "Unknown")
+
+        # DODAJTE OVE DVE LINIJE:
+        self._saved_poster = getattr(self, '_current_poster_path', None)
+        self._saved_series_name = series_name
+
         self["status"].setText(f"Loading seasons for {series_name}...")
 
         def fetch_worker():
@@ -745,6 +755,14 @@ class MainScreen(Screen):
                 else:
                     self["left_list"].moveToIndex(0)
                 self["status"].setText(f"Loaded {len(episodes)} seasons.")
+
+                # DODAJTE OVO:
+                self["movie_title"].setText(f"Series: {series_name}")
+                if self._saved_poster:
+                    self._set_poster(self._saved_poster)
+                else:
+                    self._set_poster(None)
+
                 self._update_info()
 
             self._fetch_timer = eTimer()
@@ -794,7 +812,16 @@ class MainScreen(Screen):
         self["left_list"].setList(items)
         self["left_list"].moveToIndex(0)
         self["status"].setText(f"Loaded {len(episodes)} episodes for Season {season_num}.")
+
+        # Prvo osvežite info panel (koji sada neće obrisati poster)
         self._update_info()
+
+        # Zatim forsirajte poster i naslov
+        self["movie_title"].setText(f"Series: {self._saved_series_name}")
+        if self._saved_poster:
+            self._set_poster(self._saved_poster)
+        else:
+            self._set_poster(None)
 
     def search_content(self):
         # Pretraga radi samo kada smo u listi filmova ili serija (ne u kategorijama)

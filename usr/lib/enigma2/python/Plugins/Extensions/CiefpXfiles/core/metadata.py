@@ -172,14 +172,28 @@ def fetch_metadata_async(title, media_type, callback):
 
             crew = details.get("credits", {}).get("crew", [])
             if media_type == "movie":
-                directors = [c["name"] for c in crew if c.get("job") == "Director"]
-                info["director"] = ", ".join(directors[:2]) if directors else "-"
+                directors = [c for c in crew if c.get("job") == "Director"]
+                info["director"] = ", ".join([c["name"] for c in directors[:2]]) if directors else "-"
+                # DODATO: Čuvamo sliku prvog režisera
+                if directors:
+                    info["director_profile_path"] = directors[0].get("profile_path")
+                else:
+                    info["director_profile_path"] = None
             else:
-                creators = [c["name"] for c in details.get("created_by", [])]
-                info["director"] = ", ".join(creators[:2]) if creators else "-"
+                creators = [c for c in crew if c.get("job") == "Creator"] # ili details.get("created_by")
+                info["director"] = ", ".join([c["name"] for c in creators[:2]]) if creators else "-"
+                info["director_profile_path"] = None # Serije obično nemaju sliku kreatora na isti način
 
             cast = details.get("credits", {}).get("cast", [])[:5]
             info["cast"] = ", ".join([c["name"] for c in cast]) if cast else "-"
+
+            # DODATO: Čuvamo i slike glumaca za Modern Details ekran
+            info["cast_data"] = []
+            for c in cast:
+                info["cast_data"].append({
+                    "name": c.get("name"),
+                    "profile_path": c.get("profile_path")
+                })
 
             poster_path = details.get("poster_path")
             info["poster_path"] = None

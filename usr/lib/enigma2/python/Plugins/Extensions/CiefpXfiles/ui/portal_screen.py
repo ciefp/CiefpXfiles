@@ -36,7 +36,7 @@ from enigma import eConsoleAppContainer
 from Screens.MessageBox import MessageBox
 import os
 
-PLUGIN_VERSION = "1.0.6"  # Trenutna verzija tvog plugina
+PLUGIN_VERSION = "1.0.7"  # Trenutna verzija tvog plugina
 VERSION_URL = "https://raw.githubusercontent.com/ciefp/CiefpXfiles/main/version.txt"
 UPDATE_COMMAND = "wget -q --no-check-certificate https://raw.githubusercontent.com/ciefp/CiefpXfiles/main/installer.sh -O - | /bin/sh"
 
