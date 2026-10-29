@@ -723,13 +723,27 @@ class MainScreen(Screen):
                                           flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
                                           text="[ BACK TO SERIES ]")
                 ])
-                
                 icon_season = _get_icon_path("icon_season.png")
-                episodes = data.get("episodes", {})
+                episodes_raw = data.get("episodes", {})
+
+                # --- DODATO: Normalizacija podataka (rečnik vs lista) ---
+                episodes = {}
+                if isinstance(episodes_raw, dict):
+                    # Provajder vraća rečnik, sve je u redu
+                    episodes = episodes_raw
+                elif isinstance(episodes_raw, list):
+                    # Provajder vraća listu, moramo je grupisati po sezonama
+                    for ep in episodes_raw:
+                        season = str(ep.get("season", "1"))
+                        if season not in episodes:
+                            episodes[season] = []
+                        episodes[season].append(ep)
+                # ---------------------------------------------------------
 
                 if not episodes:
                     items.append([("NONE", ""), MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0, flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text="No episodes found.")])
                 else:
+                    # Sada je bezbedno pozvati .keys() jer smo osigurali da je 'episodes' rečnik
                     for season_num in sorted(episodes.keys(), key=int):
                         season_text = f"Season {season_num}"
                         if os.path.exists(icon_season):

@@ -162,12 +162,32 @@ class ModernSeasonsScreen(Screen):
         self._fetch_metadata()
         self["status"].setText("Loading seasons...")
         self.load_seasons()
-        self.load_seasons()
 
     def load_seasons(self):
         ok, data, err = self.api.get_series_info(self.series_id)
         if ok and data:
-            episodes = data.get("episodes", {})
+            episodes_raw = data.get("episodes", {})
+
+            # --- UNIVERZALNA ZAŠTITA ---
+            episodes = {}
+            if isinstance(episodes_raw, dict):
+                episodes = episodes_raw
+            elif isinstance(episodes_raw, list):
+                for ep in episodes_raw:
+                    # Proveravamo da li je 'ep' rečnik pre nego što pozovemo .get()
+                    if isinstance(ep, dict):
+                        season = str(ep.get("season", "1"))
+                        if season not in episodes:
+                            episodes[season] = []
+                        episodes[season].append(ep)
+                    # Ako je ep lista (neki provajderi šalju liste unutar liste),
+                    # ignorišemo je ili je možete ručno mapirati ako znate indekse
+            # ---------------------------------------------------------
+
+            if not episodes:
+                self["status"].setText("No seasons found.")
+                return
+
             self.seasons = sorted(episodes.keys(), key=int)
             self.is_showing_episodes = False
             self.render_seasons()
@@ -203,7 +223,22 @@ class ModernSeasonsScreen(Screen):
     def load_episodes(self, season_num):
         ok, data, err = self.api.get_series_info(self.series_id)
         if ok and data:
-            episodes_data = data.get("episodes", {}).get(str(season_num), [])
+            episodes_raw = data.get("episodes", {})
+
+            # --- UNIVERZALNA ZAŠTITA ---
+            episodes = {}
+            if isinstance(episodes_raw, dict):
+                episodes = episodes_raw
+            elif isinstance(episodes_raw, list):
+                for ep in episodes_raw:
+                    if isinstance(ep, dict):
+                        season = str(ep.get("season", "1"))
+                        if season not in episodes:
+                            episodes[season] = []
+                        episodes[season].append(ep)
+            # ---------------------------------------
+
+            episodes_data = episodes.get(str(season_num), [])
             self.episodes = episodes_data
             self.current_season = season_num
             self.is_showing_episodes = True
