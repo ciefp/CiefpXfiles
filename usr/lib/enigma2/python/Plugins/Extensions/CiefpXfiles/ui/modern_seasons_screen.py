@@ -18,6 +18,7 @@ from Screens.MessageBox import MessageBox
 from enigma import eTimer, eServiceReference, eListboxPythonMultiContent, gFont, loadPNG, RT_HALIGN_LEFT, RT_VALIGN_CENTER
 from Tools.LoadPixmap import LoadPixmap
 
+from ..core.paths import POSTERS_CACHE_DIR
 from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async
 from ..core.xtream_api import XtreamAPI
 from ..core.config import config
@@ -28,9 +29,32 @@ def _load_pixmap_safe(path):
         except Exception:
             return None
     return None
+
 def _get_icon_path(icon_name):
     plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(plugin_dir, "icons", icon_name)
+
+def _download_image_async(url, cache_filename, callback):
+    def worker():
+        path = os.path.join(POSTERS_CACHE_DIR, cache_filename)
+        if os.path.exists(path):
+            callback(path)
+            return
+        try:
+            import urllib.request
+            import ssl
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                with open(path, 'wb') as f:
+                    f.write(resp.read())
+            callback(path)
+        except Exception as e:
+            print(f"[CiefpXfiles] Image download error: {e}")
+            callback(None)
+    threading.Thread(target=worker, daemon=True).start()
 
 class ModernSeasonsScreen(Screen):
     skin = """
@@ -42,41 +66,51 @@ class ModernSeasonsScreen(Screen):
                     backgroundColor="#011a2e" transparent="1"/>
 
             <!-- LEVI PANEL: Sezone / Epizode -->
-            <widget name="left_list" position="40,110" size="500,850"
+            <widget name="left_list" position="40,110" size="480,850"
                     scrollbarMode="showOnDemand" itemHeight="50"
                     font="Regular;26" backgroundColor="#011a2e"/>
 
             <!-- SREDNJI PANEL: Informacije o seriji -->
-            <widget name="movie_title" position="570,110" size="550,40" font="Bold;34"
+            <widget name="movie_title" position="550,110" size="550,40" font="Bold;34"
                     foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1"/>
 
-            <widget name="rating" position="570,230" size="550,30" font="Regular;24"
+            <widget name="rating" position="550,180" size="550,30" font="Regular;24"
                     foregroundColor="#03a81f" backgroundColor="#011a2e" transparent="1"/>
 
-            <widget name="imdb_rating" position="570,270" size="550,30" font="Regular;24"
+            <widget name="imdb_rating" position="550,220" size="550,30" font="Regular;24"
                     foregroundColor="#F5C518" backgroundColor="#011a2e" transparent="1"/>
 
-            <widget name="genres" position="570,310" size="550,30" font="Regular;24"
+            <widget name="genres" position="550,260" size="550,30" font="Regular;24"
                     foregroundColor="#f702db" backgroundColor="#011a2e" transparent="1"/>
 
-            <widget name="director" position="570,350" size="550,30" font="Regular;24"
+            <widget name="director" position="550,300" size="550,30" font="Regular;24"
                     foregroundColor="#f79102" backgroundColor="#011a2e" transparent="1"/>
 
-            <widget name="plot" position="570,390" size="700,400" font="Regular;24"
+            <widget name="plot" position="550,340" size="550,300" font="Regular;24"
                     foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1" valign="top"/>
 
-            <widget name="cast_header" position="570,800" size="550,30" font="Bold;24"
+            <!-- DONJI PANEL: Glumci (slike) -->
+            <widget name="cast_header" position="550,640" size="550,30" font="Bold;24"
                     foregroundColor="#00FFFF" backgroundColor="#011a2e" transparent="1"/>
 
-            <widget name="cast" position="570,840" size="550,120" font="Regular;20"
-                    foregroundColor="#00FFFF" backgroundColor="#011a2e" transparent="1" valign="top"/>
+            <widget name="cast_img_0" position="550,670" size="160,240" alphatest="blend" zPosition="3"/>
+            <widget name="cast_img_1" position="720,670" size="160,240" alphatest="blend" zPosition="3"/>
+            <widget name="cast_img_2" position="890,670" size="160,240" alphatest="blend" zPosition="3"/>
+            <widget name="cast_img_3" position="1060,670" size="160,240" alphatest="blend" zPosition="3"/>
+            <widget name="cast_img_4" position="1230,670" size="160,240" alphatest="blend" zPosition="3"/>
+
+            <widget name="cast_name_0" position="550,920" size="160,40" font="Regular;18" halign="center" foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1"/>
+            <widget name="cast_name_1" position="720,920" size="160,40" font="Regular;18" halign="center" foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1"/>
+            <widget name="cast_name_2" position="890,920" size="160,40" font="Regular;18" halign="center" foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1"/>
+            <widget name="cast_name_3" position="1060,920" size="160,40" font="Regular;18" halign="center" foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1"/>
+            <widget name="cast_name_4" position="1230,920" size="160,40" font="Regular;18" halign="center" foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1"/>
 
             <!-- DESNI PANEL: Poster -->
-            <widget name="logo" position="1320,110" size="500,750"
+            <widget name="logo" position="1420,110" size="450,675"
                     alphatest="blend" zPosition="2"/>
 
-            <!-- STATUS -->
-            <widget name="status" position="720,950" size="1000,40"
+            <!-- STATUS (Pomeren dole levo) -->
+            <widget name="status" position="500,1005" size="1000,40"
                     font="Regular;24" halign="left" valign="center"
                     foregroundColor="#00FF00" backgroundColor="#011a2e" transparent="1"/>
 
@@ -123,7 +157,12 @@ class ModernSeasonsScreen(Screen):
         self["director"] = Label("")
         self["plot"] = Label("")
         self["cast_header"] = Label("")
-        self["cast"] = Label("")
+
+        # Obrišite staro: self["cast"] = Label("")
+        # I dodajte ovo:
+        for i in range(5):
+            self["cast_img_%d" % i] = Pixmap()
+            self["cast_name_%d" % i] = Label("")
         self["status"] = Label("")
 
         self["actions"] = ActionMap(
@@ -367,15 +406,6 @@ class ModernSeasonsScreen(Screen):
             self["rating"].setText(f"TMDB: {data.get('rating', '0.0')}/10 ★")
             self["genres"].setText(f"Genres: {data.get('genres', '-')}")
             self["director"].setText(f"Creator: {data.get('director', '-')}")
-            self["cast"].setText(f"Cast: {data.get('cast', '-')}")
-
-            cast = data.get('cast', '-')
-            if cast != '-':
-                self["cast_header"].setText("Cast:")
-                self["cast"].setText(cast)
-            else:
-                self["cast_header"].setText("")
-                self["cast"].setText("")
 
             plot = data.get("plot", "-")
             if len(plot) > 450:
@@ -384,6 +414,35 @@ class ModernSeasonsScreen(Screen):
 
             self["imdb_rating"].setText("IMDB: Loading...")
             fetch_omdb_rating_async(data.get('title'), data.get('year'), self._on_imdb_data)
+
+            # --- DODATO ZA SLIKE GLUMACA ---
+            cast_list = data.get("cast_data", [])
+            if cast_list:
+                self["cast_header"].setText("Cast:")
+                for i in range(5):
+                    if i < len(cast_list):
+                        actor = cast_list[i]
+                        name = actor.get("name", "Unknown")
+                        profile_path = actor.get("profile_path")
+
+                        self["cast_name_%d" % i].setText(name)
+
+                        if profile_path:
+                            url = f"https://image.tmdb.org/t/p/w185{profile_path}"
+                            filename = f"actor_{profile_path.split('/')[-1]}"
+
+                            def cb(path, idx=i):
+                                if path:
+                                    px = _load_pixmap_safe(path)
+                                    if px and self["cast_img_%d" % idx].instance:
+                                        self["cast_img_%d" % idx].instance.setPixmap(px)
+                                        self["cast_img_%d" % idx].show()
+
+                            _download_image_async(url, filename, cb)
+                    else:
+                        self["cast_name_%d" % i].setText("")
+            else:
+                self["cast_header"].setText("")
 
         self._tmdb_ui_timer = eTimer()
         self._tmdb_ui_timer.callback.append(_update_ui)

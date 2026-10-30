@@ -16,7 +16,7 @@ from Plugins.Plugin import PluginDescriptor
 
 PLUGIN_NAME = "CiefpXfiles"
 PLUGIN_DESC = "Xtream IPTV plugin with TMDB/OMDb enrichment"
-PLUGIN_VERSION = "1.0.8"
+PLUGIN_VERSION = "1.0.9"
 PLUGIN_DIR = os.path.dirname(__file__) if '__file__' in globals() else \
     "/usr/lib/enigma2/python/Plugins/Extensions/CiefpXfiles"
 
