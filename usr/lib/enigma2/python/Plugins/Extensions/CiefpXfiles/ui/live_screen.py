@@ -54,33 +54,33 @@ class LiveScreen(Screen):
                     font="Regular;26" backgroundColor="#011a2e"/>
 
             <!-- DESNI PANEL: MINI TV (PiG) - Povećan -->
-            <widget source="session.VideoPicture" render="Pig" position="750,180" size="650,366" backgroundColor="transparent" zPosition="10"/>
-            <!-- Okvir oko PiG-a -->
-                        <!-- Okvir oko PiG-a -->
-            <eLabel position="745,175" size="655,371" zPosition="15" backgroundColor="transparent" borderColor="#00BFFF" borderWidth="5" />
+            <widget source="session.VideoPicture" render="Pig" position="750,110" size="650,366" backgroundColor="transparent" zPosition="10"/>
+            <!-- Okvir oko PiG-a (PNG) -->
+            <ePixmap position="745,105" size="658,374" zPosition="15" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/CiefpXfiles/icons/frame_minitv.png" alphatest="blend" />
 
             <!-- SREDNJI/DESNI PANEL: EPG INFO ISPOD PiG-a -->
             
             <!-- NOW -->
-            <widget name="channel_name" position="750,110" size="1150,50" font="Bold;34"
+            <widget name="channel_name" position="750,500" size="1150,40" font="Bold;30"
                     foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1"/>
-            <widget name="epg_now_title" position="750,570" size="1150,40" font="Bold;28"
+                    
+            <widget name="epg_now_time" position="750,570" size="200,30" font="Bold;28"
+                    foregroundColor="#00FF00" backgroundColor="#011a2e" transparent="1"/>
+                    
+            <widget name="epg_now_title" position="1000,570" size="1000,30" font="Bold;28"
                     foregroundColor="#00FF00" backgroundColor="#011a2e" transparent="1"/>
             
-            <widget name="epg_now_time" position="750,610" size="1150,30" font="Regular;24"
-                    foregroundColor="#AAAAAA" backgroundColor="#011a2e" transparent="1"/>
-            
-            <widget name="epg_now_desc" position="750,650" size="1100,100" font="Regular;22"
+            <widget name="epg_now_desc" position="750,620" size="1100,110" font="Regular;22"
                     foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1" valign="top"/>
 
             <!-- NEXT -->
-            <widget name="epg_next_title" position="750,750" size="1150,40" font="Bold;28"
+            <widget name="epg_next_time" position="750,750" size="200,30" font="Bold;28"
+                    foregroundColor="#FFFF00" backgroundColor="#011a2e" transparent="1"/>
+                    
+            <widget name="epg_next_title" position="1000,750" size="750,30" font="Bold;28"
                     foregroundColor="#FFFF00" backgroundColor="#011a2e" transparent="1"/>
             
-            <widget name="epg_next_time" position="750,790" size="1150,30" font="Regular;24"
-                    foregroundColor="#AAAAAA" backgroundColor="#011a2e" transparent="1"/>
-            
-            <widget name="epg_next_desc" position="750,830" size="1100,120" font="Regular;22"
+            <widget name="epg_next_desc" position="750,800" size="1100,110" font="Regular;22"
                     foregroundColor="#FFFFFF" backgroundColor="#011a2e" transparent="1" valign="top"/>
 
             <!-- STATUS -->
