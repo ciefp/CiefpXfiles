@@ -57,6 +57,8 @@ class LiveScreen(Screen):
             <widget source="session.VideoPicture" render="Pig" position="750,110" size="650,366" backgroundColor="transparent" zPosition="10"/>
             <!-- Okvir oko PiG-a (PNG) -->
             <ePixmap position="745,105" size="658,374" zPosition="15" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/CiefpXfiles/icons/frame_minitv.png" alphatest="blend" />
+            <!-- INFO IKONICA (dinamička) -->
+            <widget name="info_icon" position="1420,110" size="400,300" alphatest="blend" zPosition="15" transparent="1"/>
 
             <!-- SREDNJI/DESNI PANEL: EPG INFO ISPOD PiG-a -->
             
@@ -110,7 +112,7 @@ class LiveScreen(Screen):
                     foregroundColor="white" backgroundColor="#400080" halign="center" valign="center"/>
                                 
             <ePixmap pixmap="buttons/green.png" position="1300,1005" size="35,35" alphatest="blend"/>
-            <eLabel text="INFO:SEARCH" position="1350,1000" size="300,45" font="Bold;28"
+            <eLabel text="INFO:EPG" position="1350,1000" size="300,45" font="Bold;28"
                     foregroundColor="white" backgroundColor="#00802d" halign="center" valign="center"/>
         </screen>
     """
@@ -143,7 +145,7 @@ class LiveScreen(Screen):
         
         # Widgets
         self["title"] = Label(f"..:: CiefpXfiles Live - {portal.get('name', '')} ::..")
-        
+        self["info_icon"] = Pixmap()
         self["left_list"] = MenuList([], enableWrapAround=True, content=eListboxPythonMultiContent)
         self["left_list"].l.setItemHeight(50)
         self["left_list"].l.setFont(0, gFont("Regular", 26))
@@ -169,7 +171,7 @@ class LiveScreen(Screen):
                 "up": self.on_up,
                 "down": self.on_down,
                 "menu": self.open_settings,
-                "info": self.search_content,
+                "info": self.open_epg,   # INFO sada otvara EPG ekran
             }, -1
         )
 
@@ -312,41 +314,64 @@ class LiveScreen(Screen):
 
     def _fetch_epg_async(self, stream_id):
         print(f"[CiefpXfiles] EPG fetch started for stream_id: {stream_id}")
-        
+
+        # Prikaži ikonicu dok se ne utvrdi da li ima EPG-a
+        try:
+            icon_path = _get_icon_path("info.png")
+            if os.path.exists(icon_path):
+                px = _load_pixmap_safe(icon_path)
+                if px and self["info_icon"].instance:
+                    self["info_icon"].instance.setPixmap(px)
+                    self["info_icon"].show()
+        except Exception:
+            pass
+
         try:
             import urllib.request
             import ssl
             import json
             import base64
             import time
-            
+
             url = f"{self.api.host}/player_api.php?username={self.api.username}&password={self.api.password}&action=get_simple_data_table&stream_id={stream_id}"
-            
+
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            
+
             with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
                 raw = resp.read().decode("utf-8", errors="ignore")
                 data = json.loads(raw)
-            
+
             from enigma import eTimer
             def _update_ui():
                 try:
                     if not data or "epg_listings" not in data:
                         self["epg_now_title"].setText("No EPG data")
+                        # Sakrij ikonicu jer nema EPG-a
+                        try:
+                            self["info_icon"].hide()
+                        except Exception:
+                            pass
                         return
-                    
+
                     epg_listings = data.get("epg_listings", [])
                     if not epg_listings:
                         self["epg_now_title"].setText("No EPG data")
+                        # Sakrij ikonicu
+                        try:
+                            self["info_icon"].hide()
+                        except Exception:
+                            pass
                         return
-                    
+
+                    # Ako ima EPG, ikonica ostaje vidljiva (već je prikazana)
+
                     now = int(time.time())
                     current = None
                     next_prog = None
-                    
+
                     for listing in epg_listings:
                         try:
                             stop_ts = int(listing.get("stop_timestamp", 0))
@@ -358,63 +383,76 @@ class LiveScreen(Screen):
                                     break
                         except Exception:
                             pass
-                    
+
                     if not current:
                         self["epg_now_title"].setText("No current program")
+                        try:
+                            self["info_icon"].hide()
+                        except Exception:
+                            pass
                         return
-                    
+
                     # NOW
                     try:
                         title = base64.b64decode(current.get("title", "")).decode("utf-8", errors="ignore")
                     except Exception:
                         title = current.get("title", "")
-                    
+
                     try:
                         desc = base64.b64decode(current.get("description", "")).decode("utf-8", errors="ignore")
                     except Exception:
                         desc = current.get("description", "")
-                    
+
                     start_ts = int(current.get("start_timestamp", 0))
                     stop_ts = int(current.get("stop_timestamp", 0))
-                    
+
                     start_time = time.strftime("%H:%M", time.localtime(start_ts)) if start_ts else "--:--"
                     end_time = time.strftime("%H:%M", time.localtime(stop_ts)) if stop_ts else "--:--"
-                    
+
                     self["epg_now_title"].setText(f"NOW: {title}")
                     self["epg_now_time"].setText(f"{start_time} - {end_time}")
                     self["epg_now_desc"].setText(desc)
-                    
+
                     # NEXT
                     if next_prog:
                         try:
                             next_title = base64.b64decode(next_prog.get("title", "")).decode("utf-8", errors="ignore")
                         except Exception:
                             next_title = next_prog.get("title", "")
-                        
+
                         try:
-                            next_desc = base64.b64decode(next_prog.get("description", "")).decode("utf-8", errors="ignore")
+                            next_desc = base64.b64decode(next_prog.get("description", "")).decode("utf-8",
+                                                                                                  errors="ignore")
                         except Exception:
                             next_desc = next_prog.get("description", "")
-                            
+
                         next_start_ts = int(next_prog.get("start_timestamp", 0))
                         next_stop_ts = int(next_prog.get("stop_timestamp", 0))
-                        
+
                         next_start = time.strftime("%H:%M", time.localtime(next_start_ts)) if next_start_ts else "--:--"
                         next_stop = time.strftime("%H:%M", time.localtime(next_stop_ts)) if next_stop_ts else "--:--"
-                        
+
                         self["epg_next_title"].setText(f"NEXT: {next_title}")
                         self["epg_next_time"].setText(f"{next_start} - {next_stop}")
                         self["epg_next_desc"].setText(next_desc)
-                        
+
                 except Exception as e:
                     print(f"[CiefpXfiles] EPG UI update error: {e}")
-                
+                    try:
+                        self["info_icon"].hide()
+                    except Exception:
+                        pass
+
             self._epg_timer = eTimer()
             self._epg_timer.callback.append(_update_ui)
             self._epg_timer.start(10, True)
-            
+
         except Exception as e:
             print(f"[CiefpXfiles] EPG fetch error: {e}")
+            try:
+                self["info_icon"].hide()
+            except Exception:
+                pass
 
     def on_up(self):
         try:
@@ -499,12 +537,25 @@ class LiveScreen(Screen):
         url = self.api.build_live_url(stream_id, "ts")
         title = stream.get("name", "Unknown")
 
-        encoded_url = url.replace(":", "%3a")
-        safe_title = title.replace(":", " -").replace("\n", " ")
-        ref_str = f"{self.player_type_live}:0:1:0:0:0:0:0:0:0:{encoded_url}:{safe_title}"
+        # Uzimamo EPG opis ako postoji
+        epg_desc = getattr(self, "_current_epg_desc", "")
 
+        # Kreiramo referencu na "čist" način (kao CiefpVideoPlayer)
         try:
-            ref = eServiceReference(ref_str)
+            # Konvertujemo player_type u int (npr. "5001" -> 5001)
+            service_type = int(self.player_type_live)
+            ref = eServiceReference(service_type, 0, url)
+
+            # Postavljamo naziv kanala (ovo će se prikazati kao veliki naslov)
+            ref.setName(title)
+
+            # Ako imamo EPG opis, možemo ga dodati u naziv (opciono)
+            if epg_desc:
+                # Spajamo naziv i EPG sa " | " ili novim redom
+                # Probaj sa novim redom prvo, ako ne radi, koristi " | "
+                combined_name = f"{title} | {epg_desc}"
+                ref.setName(combined_name)
+
             if not ref.valid():
                 self["status"].setText("Invalid service reference")
                 return
@@ -525,68 +576,19 @@ class LiveScreen(Screen):
         except Exception as e:
             print(f"[CiefpXfiles] Return error: {e}")
 
+    def open_epg(self):
+        idx = self["left_list"].getSelectedIndex()
+        if self.current_category is not None and 0 < idx <= len(self.streams):
+            stream = self.streams[idx - 1]
+            stream_id = stream.get("stream_id")
+            channel_name = stream.get("name", "Unknown")
+
+            from .epg_screen import EPGScreen
+            self.session.open(EPGScreen, self.api, stream_id, channel_name)
+
     def open_settings(self):
         from .settings_screen import SettingsScreen
         self.session.open(SettingsScreen)
-
-    def search_content(self):
-        if self.current_category is None:
-            self.session.open(
-                MessageBox,
-                "Search is available only within a category.",
-                MessageBox.TYPE_INFO, timeout=3
-            )
-            return
-
-        def do_search(search_term):
-            if not search_term:
-                return
-            search_term = search_term.lower()
-            filtered = []
-            for s in self.streams:
-                name = s.get("name", "").lower()
-                if search_term in name:
-                    filtered.append(s)
-            if not filtered:
-                self.session.open(MessageBox, f"No results for: '{search_term}'", MessageBox.TYPE_INFO, timeout=3)
-                return
-            self.streams = filtered
-            self._render_filtered_streams()
-
-        self.session.openWithCallback(do_search, VirtualKeyBoard, title="Search", text="")
-
-    def _render_filtered_streams(self):
-        items = []
-        items.append([
-            ("BACK", ""),
-            MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
-                                  flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
-                                  text="[ BACK TO CATEGORIES ]")
-        ])
-
-        icon_live = _get_icon_path("icon_live.png")
-        for s in self.streams:
-            name = s.get("name", "Unknown")
-            if os.path.exists(icon_live):
-                items.append([
-                    (name, s.get("stream_id")),
-                    MultiContentEntryPixmapAlphaTest(pos=(10, 10), size=(30, 30), png=loadPNG(icon_live)),
-                    MultiContentEntryText(pos=(50, 0), size=(600, 50), font=0,
-                                          flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
-                                          text=name)
-                ])
-            else:
-                items.append([
-                    (name, s.get("stream_id")),
-                    MultiContentEntryText(pos=(0, 0), size=(650, 50), font=0,
-                                          flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
-                                          text=name)
-                ])
-
-        self["left_list"].setList(items)
-        self["left_list"].moveToIndex(0)
-        self["status"].setText(f"Found {len(self.streams)} results.")
-        self._update_info()
 
     def show_movies(self):
         self.session.open(
