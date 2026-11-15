@@ -15,6 +15,7 @@ from Screens.VirtualKeyBoard import VirtualKeyBoard
 from enigma import eTimer, eLabel, ePoint
 from Tools.LoadPixmap import LoadPixmap
 
+from ..core.recently_viewed import get_viewed_items
 from ..core.xtream_api import XtreamAPI
 from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async, translate_text_async
 from ..core.config import config
@@ -190,7 +191,23 @@ class ModernSeriesScreen(Screen):
         self.load_streams()
 
     def load_streams(self):
-        # Za serije koristimo get_series (ne get_vod_streams)
+        if self.category_id == "RECENT_SERIES":
+            recent = get_viewed_items(self.portal.get("host", ""), "series")
+            streams = []
+            for item in recent:
+                streams.append({
+                    "series_id": item.get("id"),
+                    "name": item.get("name", "Unknown"),
+                })
+            self.streams = streams
+            self.current_page = 0
+            self.selected_index = 0
+            if streams:
+                self.render_page()
+            else:
+                self["status"].setText("No recently viewed series.")
+            return
+
         ok, data, err = self.api.get_series(self.category_id)
         if ok:
             self.streams = data

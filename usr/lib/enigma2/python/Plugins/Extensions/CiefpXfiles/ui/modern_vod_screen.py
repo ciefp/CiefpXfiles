@@ -17,6 +17,7 @@ from enigma import eTimer, eServiceReference, eLabel, ePoint, loadPNG
 from Tools.LoadPixmap import LoadPixmap
 
 from .modern_vod_details import ModernVODDetailsScreen
+from ..core.recently_viewed import get_viewed_items
 from ..core.xtream_api import XtreamAPI
 from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async, translate_text_async
 from ..core.config import config
@@ -214,6 +215,24 @@ class ModernVODScreen(Screen):
         self._update_selection_frame()
 
     def load_streams(self):
+        if self.category_id == "RECENT_VOD":
+            recent = get_viewed_items(self.portal.get("host", ""), "vod")
+            streams = []
+            for item in recent:
+                streams.append({
+                    "stream_id": item.get("id"),
+                    "name": item.get("name", "Unknown"),
+                    "container_extension": "mp4",
+                })
+            self.streams = streams
+            self.current_page = 0
+            self.selected_index = 0
+            if streams:
+                self.render_page()
+            else:
+                self["status"].setText("No recently viewed movies.")
+            return
+
         ok, data, err = self.api.get_vod_streams(self.category_id)
         if ok:
             self.streams = data
