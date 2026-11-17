@@ -5,6 +5,7 @@
 from __future__ import absolute_import, print_function
 
 import os
+import re
 import threading
 from Components.ActionMap import ActionMap
 from Components.Label import Label
@@ -22,6 +23,7 @@ from ..core.paths import POSTERS_CACHE_DIR
 from ..core.metadata import fetch_metadata_async, fetch_omdb_rating_async
 from ..core.xtream_api import XtreamAPI
 from ..core.config import config
+
 def _load_pixmap_safe(path):
     if path and os.path.exists(path):
         try:
@@ -124,15 +126,19 @@ class ModernSeasonsScreen(Screen):
                     foregroundColor="white" backgroundColor="#008000" halign="center" valign="center"/>
         </screen>
     """
-    def __init__(self, session, portal, series_id, series_title, poster_path=None):
+    def __init__(self, session, portal, series_id, series_title, poster_path=None, tmdb_data=None):
         Screen.__init__(self, session)
         self.session = session
         self.portal = portal
         self.series_id = series_id
         self.series_title = series_title
-        self.poster_path = poster_path  # <-- DODATO
+        self.poster_path = poster_path
+        self.tmdb_data = tmdb_data or {}
 
-        
+        # ISPRAVKA: Izvuci TMDB ID iz prosleđenih podataka
+        self.tmdb_id = self.tmdb_data.get("id") or self.tmdb_data.get("tmdb_id")
+        print(f"[CiefpXfiles DEBUG] TMDB ID za serije: {self.tmdb_id}")
+
         self.api = XtreamAPI(portal["host"], portal["username"], portal["password"])
         
         self.seasons = []
@@ -288,7 +294,12 @@ class ModernSeasonsScreen(Screen):
     def render_episodes(self):
         items = []
         icon_play = _get_icon_path("icon_play.png")
-        
+        icon_watched = _get_icon_path("icon_watched.png")
+
+        # Uzimamo listu gledanih epizoda
+        from ..core.recently_viewed import get_watched_episodes
+        watched = get_watched_episodes(self.portal.get("host", ""), self.series_id)
+
         # BACK dugme
         items.append([
             ("BACK", "back"),
@@ -296,16 +307,25 @@ class ModernSeasonsScreen(Screen):
                                   flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
                                   text="[ BACK TO SEASONS ]")
         ])
-        
-        for ep in self.episodes:
+
+        # Postavljamo episode_num ručno
+        for i, ep in enumerate(self.episodes):
+            if not ep.get("episode_num"):
+                ep["episode_num"] = i + 1
+
             ep_num = ep.get("episode_num")
             title = ep.get("title", "Unknown")
             text = f"S{self.current_season}E{ep_num} - {title}"
-            
-            if os.path.exists(icon_play):
+
+            # Proveri da li je gledana
+            key = f"{self.current_season}_{ep_num}"
+            is_watched = key in watched
+            icon = icon_watched if is_watched else icon_play
+
+            if os.path.exists(icon):
                 items.append([
                     (ep, "episode"),
-                    MultiContentEntryPixmapAlphaTest(pos=(10, 10), size=(30, 30), png=loadPNG(icon_play)),
+                    MultiContentEntryPixmapAlphaTest(pos=(10, 10), size=(30, 30), png=loadPNG(icon)),
                     MultiContentEntryText(pos=(50, 0), size=(800, 50), font=0,
                                           flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
                                           text=text)
@@ -317,10 +337,31 @@ class ModernSeasonsScreen(Screen):
                                           flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
                                           text=text)
                 ])
-        
+
         self["left_list"].setList(items)
         self["left_list"].moveToIndex(0)
         self["status"].setText(f"Season {self.current_season}: {len(self.episodes)} episodes.")
+
+        # ODMAH povuci opis za prvu epizodu (kao u klasičnom)
+        if self.episodes and self.tmdb_id:
+            ep = self.episodes[0]
+            ep_num = ep.get("episode_num")
+            title = ep.get("title", "Unknown")
+            self["plot"].setText(f"S{self.current_season}E{ep_num} - {title}\n\nLoading metadata...")
+
+            def _on_ep_meta(success, data):
+                def _set_text():
+                    if success:
+                        self["plot"].setText(
+                            f"S{self.current_season}E{ep_num} - {data.get('title')}\n\n{data.get('plot')}")
+                    else:
+                        self["plot"].setText(f"S{self.current_season}E{ep_num} - {title}\n\nPress OK to play.")
+
+                t = eTimer()
+                t.callback.append(_set_text)
+                t.start(10, True)
+
+            fetch_episode_metadata_async(self.tmdb_id, self.current_season, ep_num, _on_ep_meta)
 
     def on_up(self):
         try:
@@ -359,8 +400,13 @@ class ModernSeasonsScreen(Screen):
         ep_id = ep.get("id")
         title = ep.get("title", "Unknown")
         ext = ep.get("container_extension", "mp4")
+        ep_num = ep.get("episode_num", 1)
 
-        url = self.api.build_series_url(ep_id, ext)
+        try:
+            url = self.api.build_series_url(ep_id, ext)
+        except Exception as error:
+            self["status"].setText("Episode link error: {}".format(error))
+            return
 
         encoded_url = url.replace(":", "%3a")
         safe_title = title.replace(":", " -").replace("\n", " ")
@@ -375,19 +421,33 @@ class ModernSeasonsScreen(Screen):
             self["status"].setText(f"Error: {e}")
             return
 
-        # === DODATO: Sačuvaj u Recently Viewed ===
+        # === Sačuvaj u Recently Viewed + Označi epizodu ===
         try:
-            from ..core.recently_viewed import add_viewed_item
+            from ..core.recently_viewed import add_viewed_item, mark_episode_watched
             add_viewed_item(
                 portal_host=self.portal.get("host", ""),
                 item_type="series",
                 item_id=self.series_id,
-                item_name=self.series_title
+                item_name=self.series_title,
+                extra_data={
+                    "last_episode": {
+                        "season": self.current_season,
+                        "episode": ep_num,
+                        "title": title
+                    }
+                }
             )
-            print("[CiefpXfiles] RecentlyViewed: Saved series %s (id=%s)" % (self.series_title, self.series_id))
+            mark_episode_watched(
+                self.portal.get("host", ""),
+                self.series_id,
+                self.current_season,
+                ep_num
+            )
+            print("[CiefpXfiles] RecentlyViewed: Saved series %s (S%sE%s)" % (
+                self.series_title, self.current_season, ep_num))
         except Exception as e:
             print("[CiefpXfiles] RecentlyViewed save error: %s" % e)
-        # ===========================================
+        # =================================================
 
         try:
             self.session.openWithCallback(
@@ -402,9 +462,14 @@ class ModernSeasonsScreen(Screen):
         self["status"].setText("Returned to series.")
 
     def _fetch_metadata(self):
-        # Preuzimamo TMDB podatke za seriju na osnovu njenog naslova
+        # Očisti naziv za TMDB pretragu (ukloni (S1E1) i sl.)
+        search_title = re.sub(r'\s*\(S\d+E\d+\)\s*$', '', self.series_title).strip()
+        search_title = re.sub(r'\s*\([^)]*\)\s*$', '', search_title).strip()
+        if not search_title:
+            search_title = self.series_title
+
         def _do_fetch():
-            fetch_metadata_async(self.series_title, "tv", self._on_tmdb_data)
+            fetch_metadata_async(search_title, "tv", self._on_tmdb_data)
 
         self._tmdb_timer = eTimer()
         self._tmdb_timer.callback.append(_do_fetch)
@@ -415,6 +480,19 @@ class ModernSeasonsScreen(Screen):
             if not success or not data:
                 self["plot"].setText("TMDB Metadata not found.")
                 return
+
+            # Fallback: ako tmdb_id nije stigao iz ModernSeriesScreen, uzmi ga sada
+            if not self.tmdb_id:
+                self.tmdb_id = data.get("id") or data.get("tmdb_id")
+
+            # === DODATO: Postavi poster ako nije već postavljen ===
+            if data.get("poster_path") and os.path.exists(data.get("poster_path")):
+                self.poster_path = data.get("poster_path")
+                px = _load_pixmap_safe(self.poster_path)
+                if px and self["logo"].instance:
+                    self["logo"].instance.setPixmap(px)
+                    self["logo"].show()
+            # =====================================================
 
             self["movie_title"].setText(f"{data.get('title', 'Unknown')} ({data.get('year', '')})")
             self["rating"].setText(f"TMDB: {data.get('rating', '0.0')}/10 ★")

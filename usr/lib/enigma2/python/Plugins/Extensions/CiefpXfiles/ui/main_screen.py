@@ -764,6 +764,7 @@ class MainScreen(Screen):
             ext = stream.get("container_extension", "mp4")
             url = self.api.build_series_url(ep_id, ext)
             title = stream.get("title", "Unknown")
+            ep_num = stream.get("episode_num", 1)  # <-- DODATO
         elif self.current_view == "VOD":
             stream_id = stream.get("stream_id")
             title = stream.get("name", "Unknown")
@@ -786,6 +787,7 @@ class MainScreen(Screen):
         except Exception as e:
             self["status"].setText(f"Error: {e}")
             return
+
         # Sačuvaj u "Recently Viewed"
         try:
             if self.current_view == "VOD":
@@ -807,7 +809,22 @@ class MainScreen(Screen):
                         portal_host=self.portal.get("host", ""),
                         item_type="series",
                         item_id=series_id,
-                        item_name=series_name
+                        item_name=series_name,
+                        extra_data={
+                            "last_episode": {
+                                "season": self.current_season,
+                                "episode": ep_num,
+                                "title": title
+                            }
+                        }
+                    )
+                    # Označi epizodu kao gledanu
+                    from ..core.recently_viewed import mark_episode_watched
+                    mark_episode_watched(
+                        self.portal.get("host", ""),
+                        series_id,
+                        self.current_season,
+                        ep_num
                     )
         except Exception as e:
             print("[CiefpXfiles] Recently viewed save error: %s" % e)
@@ -929,19 +946,33 @@ class MainScreen(Screen):
                                   flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
                                   text="[ BACK TO SEASONS ]")
         ])
-        
+
         self.streams = []
         icon_play = _get_icon_path("icon_play.png")
+        icon_watched = _get_icon_path("icon_watched.png")  # <-- DODATO
+
+        # Uzimamo listu gledanih epizoda
+        from ..core.recently_viewed import get_watched_episodes
+        series_info = self.current_series.get("info", {})
+        series_id = series_info.get("series_id")
+        if not series_id and self.streams_series_data:
+            series_id = self.streams_series_data.get("series_id")
+        watched = get_watched_episodes(self.portal.get("host", ""), series_id)
 
         for ep in episodes:
             ep_num = ep.get("episode_num")
             title = ep.get("title", "Unknown")
             ep_text = f"S{season_num}E{ep_num} - {title}"
-            
-            if os.path.exists(icon_play):
+
+            # Proveri da li je gledana
+            key = f"{season_num}_{ep_num}"
+            is_watched = key in watched
+            icon = icon_watched if is_watched else icon_play
+
+            if os.path.exists(icon):
                 items.append([
                     (ep_text, ep.get("id")),
-                    MultiContentEntryPixmapAlphaTest(pos=(10, 10), size=(30, 30), png=loadPNG(icon_play)),
+                    MultiContentEntryPixmapAlphaTest(pos=(10, 10), size=(30, 30), png=loadPNG(icon)),
                     MultiContentEntryText(pos=(50, 0), size=(600, 50), font=0,
                                           flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
                                           text=ep_text)
@@ -959,7 +990,7 @@ class MainScreen(Screen):
         self["left_list"].moveToIndex(0)
         self["status"].setText(f"Loaded {len(episodes)} episodes for Season {season_num}.")
 
-        # Prvo osvežite info panel (koji sada neće obrisati poster)
+        # Prvo osvežite info panel
         self._update_info()
 
         # Zatim forsirajte poster i naslov

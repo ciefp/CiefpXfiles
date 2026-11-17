@@ -5,6 +5,7 @@
 from __future__ import absolute_import, print_function
 
 import os
+import re
 import threading
 from Components.ActionMap import ActionMap
 from Components.Label import Label
@@ -192,12 +193,17 @@ class ModernSeriesScreen(Screen):
 
     def load_streams(self):
         if self.category_id == "RECENT_SERIES":
+            from ..core.recently_viewed import get_viewed_items
             recent = get_viewed_items(self.portal.get("host", ""), "series")
             streams = []
             for item in recent:
+                name = item.get("name", "Unknown")
+                last_ep = item.get("last_episode")
+                if last_ep and last_ep.get("season") and last_ep.get("episode"):
+                    name = "%s (S%sE%s)" % (name, last_ep.get("season"), last_ep.get("episode"))
                 streams.append({
                     "series_id": item.get("id"),
-                    "name": item.get("name", "Unknown"),
+                    "name": name,
                 })
             self.streams = streams
             self.current_page = 0
@@ -237,15 +243,22 @@ class ModernSeriesScreen(Screen):
                 stream = self.streams[stream_idx]
                 title = stream.get("name", "Unknown")
 
+                # === OČISTI NAZIV ZA TMDB PRETRAGU ===
+                search_title = re.sub(r'\s*\(S\d+E\d+\)\s*$', '', title).strip()
+                search_title = re.sub(r'\s*\([^)]*\)\s*$', '', search_title).strip()
+                if not search_title:
+                    search_title = title
+                # ======================================
+
                 # Prvo placeholder
                 px = _load_pixmap_safe(placeholder)
                 if px and widget.instance:
                     widget.instance.setPixmap(px)
                 widget.show()
 
-                # Učitaj poster u pozadini
+                # Učitaj poster u pozadini (sa očišćenim nazivom)
                 fetch_metadata_async(
-                    title,
+                    search_title,   # <-- očišćen naziv
                     "tv",
                     lambda success, data, wn=widget_name:
                     self._on_poster_data(wn, success, data)
@@ -307,21 +320,28 @@ class ModernSeriesScreen(Screen):
     def update_info_for_selected(self):
         start_idx = self.current_page * self.items_per_page
         stream_idx = start_idx + self.selected_index
-        
+
         if stream_idx >= len(self.streams):
             return
-            
+
         stream = self.streams[stream_idx]
         name = stream.get("name", "Unknown")
-        
+
+        # === OČISTI NAZIV ZA TMDB PRETRAGU ===
+        search_name = re.sub(r'\s*\(S\d+E\d+\)\s*$', '', name).strip()
+        search_name = re.sub(r'\s*\([^)]*\)\s*$', '', search_name).strip()
+        if not search_name:
+            search_name = name
+        # ======================================
+
         self["movie_title"].setText(name)
         self["rating"].setText("TMDB: Loading...")
         self["plot"].setText("Loading metadata...")
         self["status"].setText(f"Selected: {name}")
-        
+
         def _do_fetch():
-            fetch_metadata_async(name, "tv", self._on_tmdb_data)
-        
+            fetch_metadata_async(search_name, "tv", self._on_tmdb_data)  # <-- očišćen naziv
+
         self._tmdb_timer = eTimer()
         self._tmdb_timer.callback.append(_do_fetch)
         self._tmdb_timer.start(300, True)
@@ -442,18 +462,29 @@ class ModernSeriesScreen(Screen):
         series_id = stream.get("series_id")
         title = stream.get("name", "Unknown")
 
-        # Uzimamo poster_path iz trenutno učitanih TMDB podataka
-        poster_path = None
-        if hasattr(self, '_current_series_poster') and self._current_series_poster:
-            poster_path = self._current_series_poster
+        # === OČISTI NAZIV PRE PROSLEĐIVANJA ===
+        # Ukloni (S1E1) ili slične oznake sa kraja
+        clean_title_for_seasons = re.sub(r'\s*\(S\d+E\d+\)\s*$', '', title).strip()
+        clean_title_for_seasons = re.sub(r'\s*\([^)]*\)\s*$', '', clean_title_for_seasons).strip()
+        if not clean_title_for_seasons:
+            clean_title_for_seasons = title
+        # ======================================
 
-        # Otvaramo ekran za sezone
+        # Uzimamo poster_path i tmdb_data iz trenutno učitanih TMDB podataka
+        poster_path = None
+        tmdb_data = None
+        if hasattr(self, '_current_tmdb_data') and self._current_tmdb_data:
+            tmdb_data = self._current_tmdb_data
+            poster_path = tmdb_data.get("poster_path")
+
+        # Otvaramo ekran za sezone sa očišćenim nazivom
         self.session.open(
             ModernSeasonsScreen,
             self.portal,
             series_id,
-            title,
-            poster_path  # <-- DODATO
+            clean_title_for_seasons,  # <-- OČIŠĆEN NAZIV
+            poster_path,
+            tmdb_data
         )
 
     def search_content(self):
