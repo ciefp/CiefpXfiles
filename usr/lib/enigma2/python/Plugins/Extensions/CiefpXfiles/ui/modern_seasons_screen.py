@@ -420,10 +420,17 @@ class ModernSeasonsScreen(Screen):
         except Exception as e:
             self["status"].setText(f"Error: {e}")
             return
-
         # === Sačuvaj u Recently Viewed + Označi epizodu ===
         try:
             from ..core.recently_viewed import add_viewed_item, mark_episode_watched
+            # Prvo označi epizodu kao gledanu
+            mark_episode_watched(
+                self.portal.get("host", ""),
+                self.series_id,
+                self.current_season,
+                ep_num
+            )
+            # Zatim ažuriraj istoriju
             add_viewed_item(
                 portal_host=self.portal.get("host", ""),
                 item_type="series",
@@ -436,12 +443,6 @@ class ModernSeasonsScreen(Screen):
                         "title": title
                     }
                 }
-            )
-            mark_episode_watched(
-                self.portal.get("host", ""),
-                self.series_id,
-                self.current_season,
-                ep_num
             )
             print("[CiefpXfiles] RecentlyViewed: Saved series %s (S%sE%s)" % (
                 self.series_title, self.current_season, ep_num))

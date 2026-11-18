@@ -787,8 +787,7 @@ class MainScreen(Screen):
         except Exception as e:
             self["status"].setText(f"Error: {e}")
             return
-
-        # Sačuvaj u "Recently Viewed"
+        # Sačuvaj u "Recently Viewed" + označi epizodu
         try:
             if self.current_view == "VOD":
                 add_viewed_item(
@@ -805,6 +804,15 @@ class MainScreen(Screen):
                     series_id = self.streams_series_data.get("series_id")
                     series_name = self.streams_series_data.get("name", series_name)
                 if series_id:
+                    # Prvo označi epizodu kao gledanu
+                    from ..core.recently_viewed import mark_episode_watched
+                    mark_episode_watched(
+                        self.portal.get("host", ""),
+                        series_id,
+                        self.current_season,
+                        ep_num
+                    )
+                    # Zatim ažuriraj istoriju
                     add_viewed_item(
                         portal_host=self.portal.get("host", ""),
                         item_type="series",
@@ -817,14 +825,6 @@ class MainScreen(Screen):
                                 "title": title
                             }
                         }
-                    )
-                    # Označi epizodu kao gledanu
-                    from ..core.recently_viewed import mark_episode_watched
-                    mark_episode_watched(
-                        self.portal.get("host", ""),
-                        series_id,
-                        self.current_season,
-                        ep_num
                     )
         except Exception as e:
             print("[CiefpXfiles] Recently viewed save error: %s" % e)
